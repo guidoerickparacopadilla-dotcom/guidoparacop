@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://guidoparaco.netlify.app/sitemap.xml

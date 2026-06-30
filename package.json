@@ -1,0 +1,13 @@
+{
+  "name": "guidoparaco-netlify-clean",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sitio Guido Paraco con rutas internas y agente IA seguro con Netlify Functions + Groq.",
+  "scripts": {
+    "build": "echo no build required",
+    "start": "netlify dev"
+  },
+  "dependencies": {
+    "groq-sdk": "^0.30.0"
+  }
+}
