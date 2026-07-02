@@ -1781,8 +1781,8 @@ const businessToNiche = {
 if (detectedBusiness && businessToNiche[detectedBusiness]) {
     visitorProfile.nicho = businessToNiche[detectedBusiness];
 }
-
-let detectedNiche = currentNiche || '';
+}
+let detectedNiche = visitorProfile.nicho || currentNiche || '';
 
 if (cleaned.includes('gimnasio') || cleaned.includes('fitness') || cleaned.includes('entrenamiento')) {
     detectedNiche = 'gym';
