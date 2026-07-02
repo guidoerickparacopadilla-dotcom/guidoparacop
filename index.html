@@ -1690,20 +1690,195 @@ const nicheContext = {
     peluqueria: {sector:'peluquería / salón de belleza', servicios:'corte, color, alisado, barbería, tratamientos y valoración', datos:'servicio, largo del cabello, historial químico, estilista y horario', objecion:'en color se recomienda valoración para cuidar el cabello', cierre:'agendar cita o valoración'},
     abogados: {sector:'firma de abogados', servicios:'laboral, familia, civil, penal, tránsito, contratos, cobranzas y empresa', datos:'área legal, ciudad, urgencia, documentos, fechas clave y contraparte', objecion:'primero se clasifica el caso para no prometer resultados sin revisar soportes', cierre:'agendar consulta y solicitar documentos por WhatsApp'}
 };
-const visitorProfile = {name:'', city:'', phone:'', need:'', urgency:'', lastIntent:''};
+const visitorProfile = {
+    name: '',
+    city: '',
+    phone: '',
+    need: '',
+    urgency: '',
+    lastIntent: '',
+    tipoNegocio: '',
+    nicho: '',
+    resumenConversacion: '',
+    leadScore: 12
+};
+
+let leadAlreadySaved = false;
 let chatHistory = [];
 function rememberFromText(text){
-    const raw=text.trim(); const cleaned=raw.toLowerCase();
-    const phone=raw.match(/(?:\+?57\s?)?(3\d{2}[\s.-]?\d{3}[\s.-]?\d{4})/);
-    if(phone) visitorProfile.phone=phone[0];
-    const cityMatch=cleaned.match(/(?:en|soy de|estoy en)\s+(medell[ií]n|bogot[aá]|cali|barranquilla|cartagena|envigado|bello|colombia|[a-záéíóúñ]{4,})/i);
-    if(cityMatch) visitorProfile.city=cityMatch[1];
-    if(cleaned.includes('urgente')||cleaned.includes('hoy')||cleaned.includes('ya')||cleaned.includes('dolor')||cleaned.includes('demanda')||cleaned.includes('audiencia')) visitorProfile.urgency='alta';
-    if(cleaned.includes('precio')||cleaned.includes('costo')||cleaned.includes('valor')) visitorProfile.lastIntent='precio';
-    else if(cleaned.includes('agenda')||cleaned.includes('cita')||cleaned.includes('consulta')||cleaned.includes('reserv')) visitorProfile.lastIntent='agenda';
-    else if(cleaned.includes('duda')||cleaned.includes('pensar')||cleaned.includes('caro')) visitorProfile.lastIntent='objecion';
-    else visitorProfile.lastIntent='informacion';
-    visitorProfile.need = raw.slice(0,90);
+    const raw = text.trim();
+    const cleaned = raw.toLowerCase();
+
+    const phone = raw.match(/(?:\+?57\s?)?(3\d{2}[\s.-]?\d{3}[\s.-]?\d{4})/);
+    if (phone) {
+        visitorProfile.phone = phone[0].replace(/[^\d+]/g, '');
+    }
+
+    const nameMatch = raw.match(/(?:me llamo|mi nombre es|soy)\s+([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+){0,2})/i);
+    if (nameMatch && !cleaned.includes('soy de')) {
+        const possibleName = nameMatch[1].trim();
+        if (!['de', 'dueño', 'dueno', 'propietario'].includes(possibleName.toLowerCase())) {
+            visitorProfile.name = possibleName;
+        }
+    }
+
+    const cityMatch = cleaned.match(/(?:en|soy de|estoy en|vivo en)\s+(medell[ií]n|bogot[aá]|cali|barranquilla|cartagena|envigado|bello|colombia|[a-záéíóúñ]{4,})/i);
+    if (cityMatch) {
+        visitorProfile.city = cityMatch[1];
+    }
+
+    const businessMatch = raw.match(/(?:tengo|manejo|tenemos|mi negocio es|soy dueño de|soy dueno de)\s+(?:un|una)?\s*([^.,;\n]+)/i);
+    if (businessMatch) {
+        visitorProfile.tipoNegocio = businessMatch[1].trim().slice(0, 80);
+    }
+
+    const ctx = nicheContext[currentNiche] || {};
+    visitorProfile.nicho = currentNiche || '';
+    if (!visitorProfile.tipoNegocio && ctx.sector) {
+        visitorProfile.tipoNegocio = ctx.sector;
+    }
+
+    if (
+        cleaned.includes('urgente') ||
+        cleaned.includes('hoy') ||
+        cleaned.includes('ya') ||
+        cleaned.includes('este mes') ||
+        cleaned.includes('lo antes posible') ||
+        cleaned.includes('dolor') ||
+        cleaned.includes('demanda') ||
+        cleaned.includes('audiencia')
+    ) {
+        visitorProfile.urgency = 'Alta';
+    } else if (
+        cleaned.includes('próximas semanas') ||
+        cleaned.includes('proximas semanas') ||
+        cleaned.includes('este mes') ||
+        cleaned.includes('pronto')
+    ) {
+        visitorProfile.urgency = 'Media';
+    }
+
+    if (cleaned.includes('precio') || cleaned.includes('costo') || cleaned.includes('valor')) {
+        visitorProfile.lastIntent = 'precio';
+    } else if (cleaned.includes('agenda') || cleaned.includes('cita') || cleaned.includes('consulta') || cleaned.includes('reserv')) {
+        visitorProfile.lastIntent = 'agenda';
+    } else if (cleaned.includes('duda') || cleaned.includes('pensar') || cleaned.includes('caro')) {
+        visitorProfile.lastIntent = 'objecion';
+    } else {
+        visitorProfile.lastIntent = 'informacion';
+    }
+
+    if (
+        cleaned.includes('clientes') ||
+        cleaned.includes('automatizar') ||
+        cleaned.includes('whatsapp') ||
+        cleaned.includes('crm') ||
+        cleaned.includes('anuncios') ||
+        cleaned.includes('ventas') ||
+        cleaned.includes('leads') ||
+        cleaned.includes('agenda') ||
+        cleaned.includes('ia')
+    ) {
+        visitorProfile.need = raw.slice(0, 180);
+    } else if (!visitorProfile.need && raw.length > 12) {
+        visitorProfile.need = raw.slice(0, 180);
+    }
+
+    visitorProfile.leadScore = calculateLeadScore();
+    visitorProfile.resumenConversacion = buildConversationSummary();
+}
+
+function calculateLeadScore() {
+    let score = 0;
+
+    if (visitorProfile.tipoNegocio || visitorProfile.nicho) score += 20;
+    if (visitorProfile.city) score += 15;
+    if (visitorProfile.need) score += 20;
+    if (visitorProfile.urgency === 'Alta') score += 15;
+    if (visitorProfile.urgency === 'Media') score += 10;
+    if (visitorProfile.phone) score += 15;
+    if (visitorProfile.lastIntent === 'precio' || visitorProfile.lastIntent === 'agenda') score += 5;
+    if (chatHistory.length >= 4) score += 10;
+
+    return Math.min(score, 100);
+}
+
+function buildConversationSummary() {
+    const lastMessages = chatHistory
+        .slice(-6)
+        .map(m => `${m.role === 'assistant' ? 'Agente' : 'Usuario'}: ${m.content}`)
+        .join(' | ');
+
+    return lastMessages.slice(0, 800);
+}
+
+function buildWhatsAppUrl() {
+    const nombre = visitorProfile.name || 'un visitante';
+    const negocio = visitorProfile.tipoNegocio || 'mi negocio';
+    const ciudad = visitorProfile.city || 'mi ciudad';
+    const necesidad = visitorProfile.need || 'mejorar mi captación y automatización';
+
+    const message = `Hola Guido, vengo del simulador IA de tu web. Tengo ${negocio} en ${ciudad}. Quiero revisar contigo cómo se vería un sistema de IA, automatización y captación para resolver esto: ${necesidad}. Mi nombre es ${nombre}.`;
+
+    return `https://wa.me/573137962835?text=${encodeURIComponent(message)}`;
+}
+
+function hasEnoughDataToSaveLead() {
+    return Boolean(
+        visitorProfile.phone &&
+        (visitorProfile.tipoNegocio || visitorProfile.nicho) &&
+        visitorProfile.need
+    );
+}
+
+async function saveLeadToCRM() {
+    if (leadAlreadySaved) return false;
+    if (!hasEnoughDataToSaveLead()) return false;
+
+    const payload = {
+        nombre: visitorProfile.name || '',
+        whatsapp: visitorProfile.phone || '',
+        ciudad: visitorProfile.city || '',
+        tipoNegocio: visitorProfile.tipoNegocio || '',
+        nicho: visitorProfile.nicho || currentNiche || '',
+        necesidad: visitorProfile.need || '',
+        urgencia: visitorProfile.urgency || '',
+        leadScore: visitorProfile.leadScore || simScore || '',
+        resumenConversacion: visitorProfile.resumenConversacion || buildConversationSummary(),
+        estado: visitorProfile.leadScore >= 70 ? 'Lead calificado' : 'Nuevo',
+        proximaAccion: 'Contactar por WhatsApp',
+        fuente: 'Web / Simulador IA'
+    };
+
+    try {
+        const res = await fetch('/.netlify/functions/save-lead', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (data && data.ok) {
+            leadAlreadySaved = true;
+            setIntel(4, 'Lead guardado en CRM', Math.max(visitorProfile.leadScore, 80), 'Guardado en Google Sheets', 'Alta', 'Continuar por WhatsApp');
+
+            appendSystemEvent('CRM actualizado: lead guardado en Google Sheets');
+
+            appendMessage(
+                `Listo${visitorProfile.name ? ', ' + visitorProfile.name : ''}. Ya dejé tu solicitud organizada para Guido. Puedes continuar por WhatsApp con el contexto listo:<br><br><a class="sim-pop-btn-wa" href="${buildWhatsAppUrl()}" target="_blank" rel="noopener">Continuar con Guido por WhatsApp →</a>`,
+                'bot'
+            );
+
+            updateDashboardMetrics(1, 5);
+
+            return true;
+        }
+    } catch (error) {
+        console.warn('No se pudo guardar el lead:', error);
+    }
+
+    return false;
 }
 function profileLine(){
     const parts=[]; if(visitorProfile.city) parts.push(`ciudad: ${visitorProfile.city}`); if(visitorProfile.urgency) parts.push(`urgencia: ${visitorProfile.urgency}`); if(visitorProfile.phone) parts.push('teléfono recibido');
@@ -1956,9 +2131,10 @@ chatForm.addEventListener('submit', async (e) => {
     appendSystemEvent('Agente leyendo contexto de nicho + historial + datos del lead...');
     
     const response = await getLiveAgentResponse(text);
-    appendMessage(response, 'bot');
-    appendSystemEvent('Contexto actualizado: intención + datos clave + siguiente acción');
-});
+appendMessage(response, 'bot');
+appendSystemEvent('Contexto actualizado: intención + datos clave + siguiente acción');
+
+await saveLeadToCRM();
 
 nicheButtons.forEach(btn => {
     btn.addEventListener('click', () => {
