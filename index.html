@@ -1763,6 +1763,23 @@ if (cleaned.includes('gimnasio') || cleaned.includes('fitness') || cleaned.inclu
 
 if (detectedBusiness) {
     visitorProfile.tipoNegocio = detectedBusiness;
+  
+const businessToNiche = {
+    'gimnasio': 'gym',
+    'firma de abogados': 'abogados',
+    'e-commerce': 'ecommerce',
+    'clínica odontológica': 'clinica',
+    'centro de estética': 'estetica',
+    'inmobiliaria': 'inmobiliaria',
+    'veterinaria': 'veterinaria',
+    'concesionario': 'concesionario',
+    'restaurante': 'restaurante',
+    'cafetería': 'cafeteria',
+    'peluquería': 'peluqueria'
+};
+
+if (detectedBusiness && businessToNiche[detectedBusiness]) {
+    visitorProfile.nicho = businessToNiche[detectedBusiness];
 }
 
 let detectedNiche = currentNiche || '';
@@ -1829,20 +1846,38 @@ if (!visitorProfile.tipoNegocio && ctx.sector) {
     }
 
     if (
-        cleaned.includes('clientes') ||
-        cleaned.includes('automatizar') ||
-        cleaned.includes('whatsapp') ||
-        cleaned.includes('crm') ||
-        cleaned.includes('anuncios') ||
-        cleaned.includes('ventas') ||
-        cleaned.includes('leads') ||
-        cleaned.includes('agenda') ||
-        cleaned.includes('ia')
-    ) {
-        visitorProfile.need = raw.slice(0, 180);
-    } else if (!visitorProfile.need && raw.length > 12) {
-        visitorProfile.need = raw.slice(0, 180);
-    }
+        const isMetaMessage =
+    cleaned.includes('ya te') ||
+    cleaned.includes('ya dije') ||
+    cleaned.includes('ya había') ||
+    cleaned.includes('ya habia') ||
+    cleaned.includes('te dije') ||
+    cleaned.includes('te había dicho') ||
+    cleaned.includes('te habia dicho') ||
+    cleaned.includes('eso ya') ||
+    cleaned.includes('como te dije');
+
+const hasCommercialNeed =
+    cleaned.includes('clientes') ||
+    cleaned.includes('automatizar') ||
+    cleaned.includes('whatsapp') ||
+    cleaned.includes('crm') ||
+    cleaned.includes('anuncios') ||
+    cleaned.includes('ventas') ||
+    cleaned.includes('leads') ||
+    cleaned.includes('agenda') ||
+    cleaned.includes('ia') ||
+    cleaned.includes('carritos') ||
+    cleaned.includes('seguimiento') ||
+    cleaned.includes('captación') ||
+    cleaned.includes('captacion');
+
+if (!isMetaMessage && hasCommercialNeed) {
+    const needMatch = raw.match(/(?:quiero|necesito|busco|me gustaría|me gustaria)\s+(.+)/i);
+    visitorProfile.need = needMatch ? needMatch[1].trim().slice(0, 180) : raw.slice(0, 180);
+} else if (!visitorProfile.need && !isMetaMessage && raw.length > 20) {
+    visitorProfile.need = raw.slice(0, 180);
+}
 
     visitorProfile.leadScore = calculateLeadScore();
     visitorProfile.resumenConversacion = buildConversationSummary();
@@ -1919,12 +1954,17 @@ function hasEnoughDataToSaveLead() {
     const need = (visitorProfile.need || '').toLowerCase().trim();
 
     const invalidNeed =
-        !need ||
-        need.length < 10 ||
-        need.includes('hola') ||
-        need.includes('me llamo') ||
-        need.includes('mi whatsapp') ||
-        need === 'de todo un poco';
+    !need ||
+    need.length < 10 ||
+    need.includes('hola') ||
+    need.includes('me llamo') ||
+    need.includes('mi whatsapp') ||
+    need.includes('ya te') ||
+    need.includes('ya dije') ||
+    need.includes('ya había') ||
+    need.includes('ya habia') ||
+    need.includes('te dije') ||
+    need === 'de todo un poco';
 
     return Boolean(
         visitorProfile.phone &&
