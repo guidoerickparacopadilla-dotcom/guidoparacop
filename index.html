@@ -1727,16 +1727,49 @@ function rememberFromText(text){
         visitorProfile.city = cityMatch[1];
     }
 
+    let detectedBusiness = '';
+
+if (cleaned.includes('gimnasio') || cleaned.includes('fitness') || cleaned.includes('entrenamiento')) {
+    detectedBusiness = 'gimnasio';
+} else if (cleaned.includes('abogado') || cleaned.includes('firma de abogados') || cleaned.includes('oficina legal')) {
+    detectedBusiness = 'firma de abogados';
+} else if (cleaned.includes('ecommerce') || cleaned.includes('e-commerce') || cleaned.includes('tienda online') || cleaned.includes('tienda virtual') || cleaned.includes('shopify') || cleaned.includes('woocommerce')) {
+    detectedBusiness = 'e-commerce';
+} else if (cleaned.includes('clínica dental') || cleaned.includes('clinica dental') || cleaned.includes('odontología') || cleaned.includes('odontologia')) {
+    detectedBusiness = 'clínica odontológica';
+} else if (cleaned.includes('estética') || cleaned.includes('estetica') || cleaned.includes('spa')) {
+    detectedBusiness = 'centro de estética';
+} else if (cleaned.includes('inmobiliaria')) {
+    detectedBusiness = 'inmobiliaria';
+} else if (cleaned.includes('veterinaria')) {
+    detectedBusiness = 'veterinaria';
+} else if (cleaned.includes('concesionario')) {
+    detectedBusiness = 'concesionario';
+} else if (cleaned.includes('restaurante')) {
+    detectedBusiness = 'restaurante';
+} else if (cleaned.includes('cafetería') || cleaned.includes('cafeteria')) {
+    detectedBusiness = 'cafetería';
+} else if (cleaned.includes('peluquería') || cleaned.includes('peluqueria') || cleaned.includes('salón') || cleaned.includes('salon')) {
+    detectedBusiness = 'peluquería';
+} else {
     const businessMatch = raw.match(/(?:tengo|manejo|tenemos|mi negocio es|soy dueño de|soy dueno de)\s+(?:un|una)?\s*([^.,;\n]+)/i);
     if (businessMatch) {
-        visitorProfile.tipoNegocio = businessMatch[1].trim().slice(0, 80);
+        detectedBusiness = businessMatch[1]
+            .split(/\s+(?:en|y|que|para|con)\s+/i)[0]
+            .trim()
+            .slice(0, 60);
     }
+}
 
-    let detectedNiche = currentNiche || '';
+if (detectedBusiness) {
+    visitorProfile.tipoNegocio = detectedBusiness;
+}
+
+let detectedNiche = currentNiche || '';
 
 if (cleaned.includes('gimnasio') || cleaned.includes('fitness') || cleaned.includes('entrenamiento')) {
     detectedNiche = 'gym';
-} else if (cleaned.includes('abogado') || cleaned.includes('legal') || cleaned.includes('demanda') || cleaned.includes('laboral') || cleaned.includes('divorcio')) {
+} else if (cleaned.includes('abogado') || cleaned.includes('legal') || cleaned.includes('demanda') || cleaned.includes('laboral') || cleaned.includes('divorcio') || cleaned.includes('firma de abogados')) {
     detectedNiche = 'abogados';
 } else if (cleaned.includes('odont') || cleaned.includes('dental') || cleaned.includes('ortodoncia') || cleaned.includes('sonrisa')) {
     detectedNiche = 'clinica';
@@ -1744,7 +1777,7 @@ if (cleaned.includes('gimnasio') || cleaned.includes('fitness') || cleaned.inclu
     detectedNiche = 'estetica';
 } else if (cleaned.includes('inmobiliaria') || cleaned.includes('propiedad') || cleaned.includes('apartamento') || cleaned.includes('casa')) {
     detectedNiche = 'inmobiliaria';
-} else if (cleaned.includes('ecommerce') || cleaned.includes('tienda online') || cleaned.includes('carrito')) {
+} else if (cleaned.includes('ecommerce') || cleaned.includes('e-commerce') || cleaned.includes('tienda online') || cleaned.includes('tienda virtual') || cleaned.includes('carrito') || cleaned.includes('shopify') || cleaned.includes('woocommerce')) {
     detectedNiche = 'ecommerce';
 } else if (cleaned.includes('veterinaria') || cleaned.includes('mascota') || cleaned.includes('perro') || cleaned.includes('gato')) {
     detectedNiche = 'veterinaria';
@@ -1765,7 +1798,6 @@ const ctx = nicheContext[detectedNiche] || nicheContext[currentNiche] || {};
 if (!visitorProfile.tipoNegocio && ctx.sector) {
     visitorProfile.tipoNegocio = ctx.sector;
 }
-
     if (
         cleaned.includes('urgente') ||
         cleaned.includes('hoy') ||
@@ -1872,21 +1904,34 @@ function buildWhatsAppUrl() {
     const nombre = visitorProfile.name || 'un visitante';
     const negocio = visitorProfile.tipoNegocio || 'mi negocio';
     const ciudad = visitorProfile.city || 'mi ciudad';
-    const necesidad = cleanNeedText(visitorProfile.need);
 
-    const message = `Hola Guido, vengo del simulador IA de tu web. Soy ${nombre}. Tengo ${negocio} en ${ciudad} y quiero revisar cómo implementar un sistema de IA, automatización y captación para: ${necesidad}.`;
+    let necesidad = cleanNeedText(visitorProfile.need);
+
+    if (!necesidad || necesidad.length < 10 || necesidad === 'de todo un poco') {
+        necesidad = 'revisar un sistema completo de captación, automatización, CRM, WhatsApp y seguimiento comercial';
+    }
+
+    const message = `Hola Guido, vengo del simulador IA de tu web. Soy ${nombre}. Tengo ${negocio} en ${ciudad} y quiero ${necesidad}.`;
 
     return `https://wa.me/573137962835?text=${encodeURIComponent(message)}`;
 }
-
 function hasEnoughDataToSaveLead() {
+    const need = (visitorProfile.need || '').toLowerCase().trim();
+
+    const invalidNeed =
+        !need ||
+        need.length < 10 ||
+        need.includes('hola') ||
+        need.includes('me llamo') ||
+        need.includes('mi whatsapp') ||
+        need === 'de todo un poco';
+
     return Boolean(
         visitorProfile.phone &&
         (visitorProfile.tipoNegocio || visitorProfile.nicho) &&
-        visitorProfile.need
+        !invalidNeed
     );
 }
-
 async function saveLeadToCRM() {
     if (leadAlreadySaved) return false;
     if (!hasEnoughDataToSaveLead()) return false;
