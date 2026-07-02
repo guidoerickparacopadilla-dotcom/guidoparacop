@@ -2135,7 +2135,7 @@ appendMessage(response, 'bot');
 appendSystemEvent('Contexto actualizado: intención + datos clave + siguiente acción');
 
 await saveLeadToCRM();
-
+});
 nicheButtons.forEach(btn => {
     btn.addEventListener('click', () => {
         nicheButtons.forEach(b => b.classList.remove('active'));
