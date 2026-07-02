@@ -1732,11 +1732,39 @@ function rememberFromText(text){
         visitorProfile.tipoNegocio = businessMatch[1].trim().slice(0, 80);
     }
 
-    const ctx = nicheContext[currentNiche] || {};
-    visitorProfile.nicho = currentNiche || '';
-    if (!visitorProfile.tipoNegocio && ctx.sector) {
-        visitorProfile.tipoNegocio = ctx.sector;
-    }
+    let detectedNiche = currentNiche || '';
+
+if (cleaned.includes('gimnasio') || cleaned.includes('fitness') || cleaned.includes('entrenamiento')) {
+    detectedNiche = 'gym';
+} else if (cleaned.includes('abogado') || cleaned.includes('legal') || cleaned.includes('demanda') || cleaned.includes('laboral') || cleaned.includes('divorcio')) {
+    detectedNiche = 'abogados';
+} else if (cleaned.includes('odont') || cleaned.includes('dental') || cleaned.includes('ortodoncia') || cleaned.includes('sonrisa')) {
+    detectedNiche = 'clinica';
+} else if (cleaned.includes('estética') || cleaned.includes('estetica') || cleaned.includes('botox') || cleaned.includes('toxina') || cleaned.includes('hialurónico') || cleaned.includes('hialuronico')) {
+    detectedNiche = 'estetica';
+} else if (cleaned.includes('inmobiliaria') || cleaned.includes('propiedad') || cleaned.includes('apartamento') || cleaned.includes('casa')) {
+    detectedNiche = 'inmobiliaria';
+} else if (cleaned.includes('ecommerce') || cleaned.includes('tienda online') || cleaned.includes('carrito')) {
+    detectedNiche = 'ecommerce';
+} else if (cleaned.includes('veterinaria') || cleaned.includes('mascota') || cleaned.includes('perro') || cleaned.includes('gato')) {
+    detectedNiche = 'veterinaria';
+} else if (cleaned.includes('concesionario') || cleaned.includes('carro') || cleaned.includes('auto') || cleaned.includes('vehículo') || cleaned.includes('vehiculo')) {
+    detectedNiche = 'concesionario';
+} else if (cleaned.includes('restaurante') || cleaned.includes('comida') || cleaned.includes('reservas')) {
+    detectedNiche = 'restaurante';
+} else if (cleaned.includes('cafetería') || cleaned.includes('cafeteria') || cleaned.includes('café') || cleaned.includes('cafe')) {
+    detectedNiche = 'cafeteria';
+} else if (cleaned.includes('peluquería') || cleaned.includes('peluqueria') || cleaned.includes('salón') || cleaned.includes('salon')) {
+    detectedNiche = 'peluqueria';
+}
+
+visitorProfile.nicho = detectedNiche;
+
+const ctx = nicheContext[detectedNiche] || nicheContext[currentNiche] || {};
+
+if (!visitorProfile.tipoNegocio && ctx.sector) {
+    visitorProfile.tipoNegocio = ctx.sector;
+}
 
     if (
         cleaned.includes('urgente') ||
@@ -1804,21 +1832,49 @@ function calculateLeadScore() {
 }
 
 function buildConversationSummary() {
-    const lastMessages = chatHistory
-        .slice(-6)
-        .map(m => `${m.role === 'assistant' ? 'Agente' : 'Usuario'}: ${m.content}`)
+    const userMessages = chatHistory
+        .filter(m => m.role === 'user')
+        .slice(-5)
+        .map(m => m.content)
         .join(' | ');
 
-    return lastMessages.slice(0, 800);
+    const partes = [];
+
+    if (visitorProfile.name) partes.push(`Nombre: ${visitorProfile.name}`);
+    if (visitorProfile.phone) partes.push(`WhatsApp: ${visitorProfile.phone}`);
+    if (visitorProfile.city) partes.push(`Ciudad: ${visitorProfile.city}`);
+    if (visitorProfile.tipoNegocio) partes.push(`Negocio: ${visitorProfile.tipoNegocio}`);
+    if (visitorProfile.nicho) partes.push(`Nicho: ${visitorProfile.nicho}`);
+    if (visitorProfile.need) partes.push(`Necesidad: ${cleanNeedText(visitorProfile.need)}`);
+    if (visitorProfile.urgency) partes.push(`Urgencia: ${visitorProfile.urgency}`);
+
+    if (userMessages) partes.push(`Mensajes del usuario: ${userMessages}`);
+
+    return partes.join(' | ').slice(0, 800);
+}
+
+function cleanNeedText(text) {
+    if (!text) return 'mejorar mi captación y automatización';
+
+    return text
+        .replace(/hola[, ]*/ig, '')
+        .replace(/me llamo [a-záéíóúñ]+/ig, '')
+        .replace(/mi nombre es [a-záéíóúñ]+/ig, '')
+        .replace(/mi whatsapp es [\d\s+.-]+/ig, '')
+        .replace(/tengo un/ig, 'tengo')
+        .replace(/tengo una/ig, 'tengo')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
 }
 
 function buildWhatsAppUrl() {
     const nombre = visitorProfile.name || 'un visitante';
     const negocio = visitorProfile.tipoNegocio || 'mi negocio';
     const ciudad = visitorProfile.city || 'mi ciudad';
-    const necesidad = visitorProfile.need || 'mejorar mi captación y automatización';
+    const necesidad = cleanNeedText(visitorProfile.need);
 
-    const message = `Hola Guido, vengo del simulador IA de tu web. Tengo ${negocio} en ${ciudad}. Quiero revisar contigo cómo se vería un sistema de IA, automatización y captación para resolver esto: ${necesidad}. Mi nombre es ${nombre}.`;
+    const message = `Hola Guido, vengo del simulador IA de tu web. Soy ${nombre}. Tengo ${negocio} en ${ciudad} y quiero revisar cómo implementar un sistema de IA, automatización y captación para: ${necesidad}.`;
 
     return `https://wa.me/573137962835?text=${encodeURIComponent(message)}`;
 }
