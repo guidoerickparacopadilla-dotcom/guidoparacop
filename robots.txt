@@ -68,4 +68,4 @@ Disallow: /
 # ============================================
 # SITEMAP
 # ============================================
-Sitemap: https://guidoparaco.netlify.app/sitemap.xml
+Sitemap: https://guidoparaco.com/sitemap.xml
