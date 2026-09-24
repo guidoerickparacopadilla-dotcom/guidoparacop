@@ -1358,8 +1358,33 @@ function renderOptions(options) {
         optionsPanel.appendChild(btn);
     });
 }
+function captureCriticalFields(text) {
+    const raw = String(text || '').trim();
 
+    const phoneMatch = raw.match(
+        /(?:\+?57\s*)?(3\d{2}[\s.-]?\d{3}[\s.-]?\d{4})/
+    );
+
+    if (phoneMatch) {
+        const digits = phoneMatch[0].replace(/\D/g, '');
+
+        visitorProfile.phone =
+            digits.startsWith('57')
+                ? `+${digits}`
+                : `+57${digits}`;
+    }
+
+    const correctedName = raw.match(
+        /(?:mi nombre real es|realmente me llamo|en realidad me llamo|mi nombre es|me llamo)\s+([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+){0,2})/i
+    );
+
+    if (correctedName) {
+        visitorProfile.name =
+            correctedName[1].trim();
+    }
+}
 async function getLiveAgentResponse(text) {
+      captureCriticalFields(text);
     const ctx =
         nicheContext[currentNiche] || {};
 
@@ -1489,13 +1514,9 @@ chatForm.addEventListener(
             'bot'
         );
 
-        if (
-            result.crmReady &&
-            hasEnoughDataToSaveLead()
-        ) {
-            await saveLeadToCRM();
-        }
-    }
+       if (hasEnoughDataToSaveLead()) {
+    await saveLeadToCRM();
+}
 );
 
 nicheButtons.forEach(btn => {
