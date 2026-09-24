@@ -19,9 +19,10 @@ exports.handler = async (event) => {
   const apiKey = process.env.GROQ_API_KEY;
   const model = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
 
-  // DIAGNÓSTICO DIRECTO
-  // Permite abrir la URL de la función en el navegador
-  // y comprobar Groq sin usar DevTools.
+  // ==========================================
+  // HEALTH CHECK
+  // ==========================================
+
   if (event.httpMethod === 'GET') {
     if (!apiKey) {
       return json(500, {
@@ -32,7 +33,7 @@ exports.handler = async (event) => {
     }
 
     try {
-      const probeResponse = await fetch(
+      const response = await fetch(
         'https://api.groq.com/openai/v1/chat/completions',
         {
           method: 'POST',
@@ -45,37 +46,37 @@ exports.handler = async (event) => {
             messages: [
               {
                 role: 'user',
-                content: 'Responde únicamente con la palabra OK.'
+                content: 'Responde solamente con OK.'
               }
             ],
             temperature: 0.5,
             max_completion_tokens: 64,
             reasoning_effort: 'low',
-            include_reasoning: false,
+            reasoning_format: 'hidden',
             stream: false
           })
         }
       );
 
-      const probeData = await probeResponse.json().catch(() => ({}));
+      const data = await response.json().catch(() => ({}));
 
-      if (!probeResponse.ok) {
-        const upstreamError =
-          probeData?.error?.message ||
-          probeData?.message ||
-          `Groq respondió HTTP ${probeResponse.status}`;
+      if (!response.ok) {
+        const errorMessage =
+          data?.error?.message ||
+          data?.message ||
+          `Groq respondió HTTP ${response.status}`;
 
         console.error('GROQ_HEALTH_ERROR', {
-          status: probeResponse.status,
+          status: response.status,
           model,
-          error: upstreamError
+          error: errorMessage
         });
 
         return json(502, {
           ok: false,
           model,
-          groqStatus: probeResponse.status,
-          error: upstreamError
+          groqStatus: response.status,
+          error: errorMessage
         });
       }
 
@@ -90,7 +91,7 @@ exports.handler = async (event) => {
       return json(502, {
         ok: false,
         model,
-        error: error?.message || 'Error desconocido conectando con Groq.'
+        error: error?.message || 'Error desconocido.'
       });
     }
   }
@@ -101,12 +102,108 @@ exports.handler = async (event) => {
     });
   }
 
+  // ==========================================
+  // HELPERS
+  // ==========================================
+
+  const cleanString = (value, max = 500) => {
+    if (typeof value !== 'string') return '';
+
+    return value
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, max);
+  };
+
+  const normalizePhone = (value) => {
+    const raw = cleanString(value, 40);
+
+    if (!raw) return '';
+
+    const digits = raw.replace(/\D/g, '');
+
+    if (digits.startsWith('57') && digits.length === 12) {
+      return `+${digits}`;
+    }
+
+    if (digits.length === 10 && digits.startsWith('3')) {
+      return `+57${digits}`;
+    }
+
+    return raw;
+  };
+
+  const calculateScore = (prospect) => {
+    let score = 0;
+
+    if (prospect.name) score += 10;
+    if (prospect.whatsapp) score += 20;
+    if (prospect.city) score += 10;
+    if (prospect.businessType) score += 15;
+    if (prospect.niche) score += 5;
+    if (prospect.need) score += 20;
+
+    if (prospect.urgency === 'Alta') score += 10;
+    else if (prospect.urgency === 'Media') score += 5;
+
+    if (prospect.implementationIntent) score += 5;
+    if (prospect.wantsGuido) score += 5;
+
+    return Math.min(score, 100);
+  };
+
+  const calculateState = (prospect, score) => {
+    if (
+      prospect.whatsapp &&
+      prospect.businessType &&
+      prospect.need &&
+      (prospect.implementationIntent || prospect.wantsGuido)
+    ) {
+      return 'Listo para contacto';
+    }
+
+    if (score >= 65) {
+      return 'Lead calificado';
+    }
+
+    if (
+      prospect.businessType ||
+      prospect.need ||
+      prospect.city
+    ) {
+      return 'Lead en conversación';
+    }
+
+    return 'Explorando';
+  };
+
+  const getNextMissingField = (prospect) => {
+    if (!prospect.businessType) return 'tipo de negocio';
+    if (!prospect.need) return 'necesidad principal';
+    if (!prospect.city) return 'ciudad';
+
+    if (
+      prospect.implementationIntent ||
+      prospect.wantsGuido
+    ) {
+      if (!prospect.name) return 'nombre';
+      if (!prospect.whatsapp) return 'WhatsApp';
+      if (!prospect.urgency) return 'urgencia';
+    }
+
+    return '';
+  };
+
+  // ==========================================
+  // MAIN
+  // ==========================================
+
   try {
     if (!apiKey) {
       return json(500, {
         reply: null,
         fallback: true,
-        error: 'GROQ_API_KEY no está configurada en Netlify.'
+        error: 'GROQ_API_KEY no está configurada.'
       });
     }
 
@@ -118,14 +215,14 @@ exports.handler = async (event) => {
       return json(400, {
         reply: null,
         fallback: true,
-        error: 'El cuerpo de la solicitud no es JSON válido.'
+        error: 'JSON inválido.'
       });
     }
 
     const {
       message,
-      niche,
-      context,
+      niche = '',
+      context = {},
       visitorProfile = {},
       history = []
     } = body;
@@ -138,184 +235,479 @@ exports.handler = async (event) => {
       });
     }
 
-    const normalizedMessage = message
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
+    const currentMessage = cleanString(message, 1800);
 
-    const hasImplementationIntent =
-      /\b(me interesa|quiero esto|cuanto cuesta|precio|cotiz|implementar|implementarlo|contratar|hablar con guido|contactar a guido|agenda|agendar|quiero una llamada|lo necesito para mi negocio|como empezamos|empecemos)\b/i.test(
-        normalizedMessage
-      );
+    // ==========================================
+    // HISTORIAL
+    // Evita duplicar el mensaje actual.
+    // ==========================================
 
-    const hasDirectContactIntent =
-      /\b(mi whatsapp|mi numero es|te dejo mi numero|hablar por whatsapp|pasar a whatsapp|contactame)\b/i.test(
-        normalizedMessage
-      );
+    let safeHistory = Array.isArray(history)
+      ? history
+          .slice(-12)
+          .map((item) => ({
+            role:
+              item?.role === 'assistant'
+                ? 'assistant'
+                : 'user',
+            content: cleanString(item?.content, 1200)
+          }))
+          .filter((item) => item.content)
+      : [];
 
-    const recommendedMode =
-      hasImplementationIntent || hasDirectContactIntent
-        ? 'INTERES_EN_IMPLEMENTAR'
-        : 'DEMOSTRACION';
+    if (safeHistory.length) {
+      const last = safeHistory[safeHistory.length - 1];
 
-    // El nicho detectado en la conversación tiene prioridad
-    // sobre el nicho por defecto de la interfaz.
-    const effectiveNiche =
-      visitorProfile?.nicho ||
-      niche ||
-      'general';
+      if (
+        last.role === 'user' &&
+        last.content.toLowerCase() ===
+          currentMessage.toLowerCase()
+      ) {
+        safeHistory.pop();
+      }
+    }
 
-    const detectedBusiness =
-      visitorProfile?.tipoNegocio || '';
+    // ==========================================
+    // PERFIL PREVIO
+    // Es una pista, NO una verdad absoluta.
+    // ==========================================
 
-    const detectedCity =
-      visitorProfile?.city || '';
+    const previousProfile = {
+      name: cleanString(visitorProfile?.name, 100),
+      whatsapp: normalizePhone(visitorProfile?.phone),
+      city: cleanString(visitorProfile?.city, 100),
+      businessType: cleanString(
+        visitorProfile?.tipoNegocio,
+        150
+      ),
+      niche: cleanString(visitorProfile?.nicho, 80),
+      need: cleanString(visitorProfile?.need, 300),
+      urgency: cleanString(
+        visitorProfile?.urgency,
+        30
+      )
+    };
+
+    // ==========================================
+    // PROMPT MAESTRO
+    // ==========================================
 
     const instructions = `
-Eres el agente IA de Guido Paraco, Growth Partner IA en Medellín, Colombia.
+Eres el agente IA comercial de Guido Paraco.
 
-OBJETIVO
+Tu función tiene DOS CAPAS simultáneas y debes mantenerlas perfectamente separadas.
 
-Esta web muestra una demo viva de cómo un agente IA puede atender, filtrar y convertir clientes de un negocio real.
+==================================================
+CAPA 1 — EXPERIENCIA VISIBLE: DEMOSTRACIÓN
+==================================================
 
-Debes demostrar valor y, cuando exista intención comercial real, calificar al prospecto y llevarlo hacia Guido.
+El visitante debe sentir que está probando cómo funcionaría un agente IA dentro de un negocio.
 
-MODO DE ESTE TURNO
+Debes:
 
-${recommendedMode}
+- entender lo que dice;
+- responder con contexto;
+- demostrar cómo atenderías, filtrarías o convertirías clientes;
+- mantener una conversación natural;
+- hacer máximo UNA pregunta por respuesta;
+- evitar interrogatorios;
+- evitar vender agresivamente;
+- demostrar valor antes de pedir datos de contacto.
 
-REGLAS
+La demostración NO debe sonar como:
+"Estoy recopilando información para el CRM".
 
-- No vendas agresivamente si el visitante solo está explorando.
-- Si está explorando, demuestra cómo funcionaría el agente para SU negocio.
-- Si pide precio, implementación, cotización, agenda o hablar con Guido, pasa a modo comercial suave.
-- No inventes precios.
-- No prometas resultados garantizados.
-- Pide solo el dato faltante más importante.
-- Haz máximo una pregunta al final.
-- Máximo 75 palabras, salvo que el usuario pida detalle.
-- Español natural, cercano y profesional.
-- Tono colombiano neutro.
-- No hables como robot.
-- No repitas información que ya esté en el historial o perfil.
-- El negocio y nicho detectados en el mensaje o perfil tienen prioridad sobre cualquier nicho por defecto de la interfaz.
-- NUNCA conviertas una clínica estética en clínica odontológica por un valor predeterminado.
-- Si el usuario corrige un dato, usa el dato más reciente y descarta el anterior.
-- No digas que el CRM guardó datos si el sistema no lo confirmó.
+Nunca menciones procesos internos, extracción de datos, JSON, variables, scoring o CRM salvo que sea relevante para explicar el servicio de Guido.
 
-DEMOSTRACIÓN
+==================================================
+CAPA 2 — PROCESO INVISIBLE: CALIFICACIÓN
+==================================================
 
-Cuando el usuario mencione su negocio:
+Mientras conversas debes construir silenciosamente el perfil REAL del prospecto.
 
-1. Reconoce correctamente el negocio.
-2. Explica brevemente qué podría hacer el agente.
-3. Haz una sola pregunta o invita a simular una conversación.
+Campos:
+
+- nombre
+- WhatsApp
+- ciudad
+- tipo real de negocio
+- nicho
+- necesidad comercial principal
+- urgencia
+- intención de implementar
+- deseo de hablar con Guido
+
+Debes extraer esos datos SOLO cuando estén respaldados por lo que el visitante realmente haya dicho.
+
+==================================================
+REGLA CRÍTICA: DEMO ≠ NEGOCIO REAL
+==================================================
+
+Distingue estrictamente entre:
+
+A) NEGOCIO REAL DEL PROSPECTO
+
+Ejemplos:
+
+"Yo tengo una clínica estética."
+"Manejo un restaurante en Envigado."
+"Mi empresa vende por Shopify."
+
+Eso SÍ puede convertirse en datos del perfil.
+
+B) EJEMPLO / SIMULACIÓN / PRUEBA
+
+Ejemplos:
+
+"Muéstrame cómo sería para un restaurante."
+"Probemos con una clínica."
+"Supongamos que tengo una inmobiliaria."
+"Haz de cuenta que soy odontólogo."
+
+Eso NO demuestra que ese sea su negocio real.
+
+No contamines el perfil real con datos usados solamente para una simulación.
+
+Si existe duda entre ejemplo y realidad, conserva el perfil previo confirmado y conversa normalmente.
+
+==================================================
+REGLA CRÍTICA: CORRECCIONES
+==================================================
+
+El dato explícito MÁS RECIENTE tiene prioridad.
 
 Ejemplo:
 
-"Perfecto. Para una clínica estética en Medellín, el agente podría filtrar pacientes por tratamiento, intención, horario y datos de contacto antes de pasarlos al equipo. Probemos: escríbeme como si fueras una paciente preguntando por una cita."
+Usuario:
+"Mi nombre es Carlos."
 
-INTERÉS EN IMPLEMENTAR
+Después:
+"No, perdón, realmente me llamo Andrés. Carlos no."
 
-Si existe intención comercial:
+Resultado:
+nombre = Andrés
 
-- Explica brevemente que el alcance depende del negocio, canales y sistema requerido.
-- Captura progresivamente nombre, WhatsApp, ciudad, negocio, necesidad y urgencia.
-- No vuelvas a pedir información que ya tienes.
-- Si ya dejó WhatsApp o pidió hablar con Guido, orienta el cierre hacia WhatsApp.
+No conserves Carlos.
 
-CAPACIDADES DE GUIDO
+Otro ejemplo:
 
-Guido trabaja con:
+"Estoy en Bogotá."
+Después:
+"Perdón, la empresa está en Medellín."
 
-- Agentes IA
-- Automatización
-- CRM
-- Meta Ads
-- WhatsApp
-- Embudos
-- Seguimiento comercial
-- Adquisición
-- Conversión
-- Retención
+Si queda claro que Medellín es la ubicación relevante del negocio, usa Medellín.
 
-Guido construye sistemas conectados, no solamente tareas aisladas.
+==================================================
+PERFIL PREVIO NO ES VERDAD ABSOLUTA
+==================================================
 
-GUÍA POR NICHO
+El navegador puede haber detectado datos automáticamente.
 
-Clínica estética:
-tratamiento, valoración, intención, horario, ciudad, confianza y WhatsApp.
+Trata este perfil previo como una HIPÓTESIS.
 
-Odontología:
-tratamiento, dolor o urgencia, valoración, horario, ciudad y WhatsApp.
+No mantengas un dato si el historial real contradice ese dato.
 
-Inmobiliaria:
-compra o arriendo, zona, presupuesto, inmueble e intención.
+No conviertas valores predeterminados de la interfaz en hechos.
 
-E-commerce:
-producto, dudas, pagos, envíos, carrito y recompra.
+Especialmente:
 
-Restaurante:
-reservas, pedidos, horarios, eventos y recurrencia.
+- "clinica" no significa automáticamente odontología;
+- un ejemplo de nicho no significa que el usuario tenga ese negocio;
+- una palabra aislada no confirma propiedad del negocio.
 
-Gimnasio:
-objetivo, horarios, prueba, inscripción y seguimiento.
+==================================================
+DEMOSTRACIÓN NATURAL
+==================================================
 
-Veterinaria:
-mascota, síntoma, urgencia, cita y recordatorios.
+Si el visitante todavía está explorando:
 
-Concesionario:
-modelo, presupuesto, financiación, retoma y test drive.
+- responde principalmente como demostración;
+- usa el contexto real que sí conozcas;
+- no pidas WhatsApp demasiado pronto;
+- puedes hacer una pregunta que simultáneamente mejore la demo y revele contexto.
 
-Peluquería:
-servicio, horario, valoración, color y recordatorios.
+Ejemplo:
 
-Abogados:
-área legal, ciudad, urgencia y documentos.
-No des asesoría legal definitiva.
+"Perfecto. Para una clínica estética, el agente podría filtrar por tratamiento, intención y disponibilidad antes de pasar el contacto al equipo. ¿Hoy ustedes reciben más consultas por Instagram o por WhatsApp?"
 
-CONTEXTO ACTUAL
+Esa pregunta demuestra el sistema Y descubre el proceso comercial.
 
-Nicho efectivo:
-${effectiveNiche}
+==================================================
+TRANSICIÓN A INTERÉS COMERCIAL
+==================================================
 
-Negocio detectado:
-${detectedBusiness || 'no detectado todavía'}
+Considera intención comercial cuando el visitante:
 
-Ciudad detectada:
-${detectedCity || 'no detectada todavía'}
+- dice que le interesa;
+- pregunta cómo implementarlo;
+- pregunta precio o cotización;
+- quiere empezar;
+- quiere contratar;
+- pide hablar con Guido;
+- pide llamada o reunión;
+- deja WhatsApp;
+- expresa un problema concreto que quiere resolver.
 
-Contexto recibido de la interfaz:
+Cuando exista interés:
+
+1. Sigue aportando valor.
+2. No reinicies la conversación.
+3. No repitas preguntas respondidas.
+4. Completa SOLO los datos importantes que falten.
+5. Nombre y WhatsApp se solicitan cuando la conversación ya justifica contacto.
+6. Si el usuario ya dejó WhatsApp, no lo vuelvas a pedir.
+7. Si ya hay suficiente contexto, orienta naturalmente hacia Guido.
+
+==================================================
+QUÉ HACE GUIDO
+==================================================
+
+Guido Paraco trabaja como Growth Partner IA.
+
+Puede trabajar con:
+
+- agentes IA;
+- automatización;
+- CRM;
+- WhatsApp;
+- Meta Ads;
+- embudos;
+- adquisición;
+- seguimiento comercial;
+- conversión;
+- retención;
+- sistemas conectados de crecimiento.
+
+No inventes resultados ni garantías.
+
+No inventes precios específicos.
+
+Si preguntan precio:
+
+"Depende del negocio, los canales y el nivel de sistema que tenga sentido implementar."
+
+Después continúa la calificación natural.
+
+==================================================
+NICHO / TIPO DE NEGOCIO
+==================================================
+
+Tipo de negocio debe ser humano y específico.
+
+Ejemplos:
+
+"clínica estética"
+"restaurante"
+"firma de abogados"
+"tienda e-commerce de ropa"
+"gimnasio"
+"inmobiliaria"
+
+Nicho puede ser una clasificación breve.
+
+Ejemplos:
+
+"estética"
+"restaurantes"
+"legal"
+"ecommerce"
+"fitness"
+"inmobiliario"
+
+==================================================
+NECESIDAD
+==================================================
+
+No copies cualquier frase del usuario como necesidad.
+
+Resume el PROBLEMA COMERCIAL real.
+
+Ejemplo:
+
+Usuario:
+"Nos escriben como 80 personas al mes por Instagram pero muchas preguntan y después desaparecen."
+
+Necesidad:
+"Mejorar conversión y seguimiento de consultas de Instagram para aumentar citas."
+
+==================================================
+URGENCIA
+==================================================
+
+Alta:
+quiere empezar ya, esta semana, cuanto antes, tiene urgencia explícita.
+
+Media:
+quiere resolverlo pronto, este mes o próximas semanas.
+
+Baja:
+está explorando sin prisa.
+
+Vacío:
+no existe evidencia suficiente.
+
+==================================================
+RESPUESTA VISIBLE
+==================================================
+
+- Español natural.
+- Cercano y profesional.
+- Máximo 90 palabras.
+- Máximo una pregunta.
+- No digas que eres "una inteligencia artificial".
+- No digas que estás recopilando datos.
+- No digas que guardaste algo en CRM.
+- No digas que contactaste a Guido.
+- No prometas resultados garantizados.
+- No inventes información.
+- No confundas una clínica estética con odontología.
+- No repitas datos innecesariamente.
+
+==================================================
+DATOS ACTUALES
+==================================================
+
+Pista de nicho de interfaz:
+${cleanString(niche, 80) || 'ninguna'}
+
+Contexto de interfaz:
 ${JSON.stringify(context || {})}
 
-Perfil detectado:
-${JSON.stringify(visitorProfile || {})}
-`;
+Perfil previo PROVISIONAL:
+${JSON.stringify(previousProfile)}
 
-    const safeHistory = Array.isArray(history)
-      ? history.slice(-10).map((item) => ({
-          role:
-            item?.role === 'assistant'
-              ? 'assistant'
-              : 'user',
-          content: String(
-            item?.content || ''
-          ).slice(0, 1000)
-        }))
-      : [];
+Recuerda:
+el historial y las afirmaciones explícitas del usuario tienen prioridad sobre el perfil provisional.
+`;
 
     const messages = [
       {
         role: 'user',
-        content:
-          `INSTRUCCIONES DEL AGENTE:\n${instructions}`
+        content: `INSTRUCCIONES OPERATIVAS DEL AGENTE:\n${instructions}`
       },
       ...safeHistory,
       {
         role: 'user',
-        content: message.slice(0, 1500)
+        content: currentMessage
       }
     ];
+
+    // ==========================================
+    // STRUCTURED OUTPUT
+    // ==========================================
+
+    const responseFormat = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'guido_web_agent_response',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: {
+            reply: {
+              type: 'string'
+            },
+
+            conversationMode: {
+              type: 'string',
+              enum: [
+                'DEMO',
+                'DISCOVERY',
+                'COMMERCIAL'
+              ]
+            },
+
+            prospect: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string'
+                },
+
+                whatsapp: {
+                  type: 'string'
+                },
+
+                city: {
+                  type: 'string'
+                },
+
+                businessType: {
+                  type: 'string'
+                },
+
+                niche: {
+                  type: 'string'
+                },
+
+                need: {
+                  type: 'string'
+                },
+
+                urgency: {
+                  type: 'string',
+                  enum: [
+                    '',
+                    'Baja',
+                    'Media',
+                    'Alta'
+                  ]
+                },
+
+                realBusinessConfirmed: {
+                  type: 'boolean'
+                },
+
+                implementationIntent: {
+                  type: 'boolean'
+                },
+
+                wantsGuido: {
+                  type: 'boolean'
+                }
+              },
+
+              required: [
+                'name',
+                'whatsapp',
+                'city',
+                'businessType',
+                'niche',
+                'need',
+                'urgency',
+                'realBusinessConfirmed',
+                'implementationIntent',
+                'wantsGuido'
+              ],
+
+              additionalProperties: false
+            },
+
+            summary: {
+              type: 'string'
+            },
+
+            nextAction: {
+              type: 'string'
+            }
+          },
+
+          required: [
+            'reply',
+            'conversationMode',
+            'prospect',
+            'summary',
+            'nextAction'
+          ],
+
+          additionalProperties: false
+        }
+      }
+    };
+
+    // ==========================================
+    // GROQ REQUEST
+    // ==========================================
 
     const groqResponse = await fetch(
       'https://api.groq.com/openai/v1/chat/completions',
@@ -325,20 +717,23 @@ ${JSON.stringify(visitorProfile || {})}
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
+
         body: JSON.stringify({
           model,
           messages,
-          temperature: 0.6,
-          max_completion_tokens: 512,
+          temperature: 0.55,
+          max_completion_tokens: 900,
           reasoning_effort: 'low',
-          include_reasoning: false,
+          reasoning_format: 'hidden',
+          response_format: responseFormat,
           stream: false
         })
       }
     );
 
-    const completion =
-      await groqResponse.json().catch(() => ({}));
+    const completion = await groqResponse
+      .json()
+      .catch(() => ({}));
 
     if (!groqResponse.ok) {
       const upstreamError =
@@ -356,15 +751,14 @@ ${JSON.stringify(visitorProfile || {})}
         reply: null,
         fallback: true,
         model,
-        groqStatus: groqResponse.status,
         error: upstreamError
       });
     }
 
-    const reply =
-      completion?.choices?.[0]?.message?.content?.trim();
+    const rawContent =
+      completion?.choices?.[0]?.message?.content;
 
-    if (!reply) {
+    if (!rawContent) {
       console.error(
         'GROQ_EMPTY_REPLY',
         JSON.stringify(completion)
@@ -374,57 +768,195 @@ ${JSON.stringify(visitorProfile || {})}
         reply: null,
         fallback: true,
         model,
-        error:
-          'Groq respondió, pero no devolvió contenido utilizable.'
+        error: 'Groq respondió sin contenido.'
       });
     }
 
-    const baseScore =
-      Number(visitorProfile?.leadScore) || 12;
+    let structured;
 
-    const score = Math.min(
-      100,
-      Math.max(
-        baseScore,
-        recommendedMode ===
-          'INTERES_EN_IMPLEMENTAR'
-          ? 72
-          : 35
-      )
+    try {
+      structured = JSON.parse(rawContent);
+    } catch (error) {
+      console.error(
+        'GROQ_JSON_PARSE_ERROR',
+        rawContent
+      );
+
+      return json(502, {
+        reply: null,
+        fallback: true,
+        model,
+        error: 'No se pudo interpretar la respuesta estructurada.'
+      });
+    }
+
+    // ==========================================
+    // NORMALIZACIÓN FINAL
+    // ==========================================
+
+    const prospect = {
+      name: cleanString(
+        structured?.prospect?.name,
+        100
+      ),
+
+      whatsapp: normalizePhone(
+        structured?.prospect?.whatsapp
+      ),
+
+      city: cleanString(
+        structured?.prospect?.city,
+        100
+      ),
+
+      businessType: cleanString(
+        structured?.prospect?.businessType,
+        150
+      ),
+
+      niche: cleanString(
+        structured?.prospect?.niche,
+        80
+      ),
+
+      need: cleanString(
+        structured?.prospect?.need,
+        350
+      ),
+
+      urgency: [
+        'Baja',
+        'Media',
+        'Alta'
+      ].includes(structured?.prospect?.urgency)
+        ? structured.prospect.urgency
+        : '',
+
+      realBusinessConfirmed:
+        Boolean(
+          structured?.prospect?.realBusinessConfirmed
+        ),
+
+      implementationIntent:
+        Boolean(
+          structured?.prospect?.implementationIntent
+        ),
+
+      wantsGuido:
+        Boolean(
+          structured?.prospect?.wantsGuido
+        )
+    };
+
+    // Si el modelo dice que NO existe negocio real confirmado,
+    // no permitimos que un simple ejemplo nuevo invente negocio.
+    // Pero conservamos un negocio previo ya confirmado si existe.
+    if (
+      !prospect.realBusinessConfirmed &&
+      !previousProfile.businessType
+    ) {
+      prospect.businessType = '';
+      prospect.niche = '';
+    }
+
+    const score = calculateScore(prospect);
+    const state = calculateState(prospect, score);
+    const nextMissingField =
+      getNextMissingField(prospect);
+
+    const crmReady = Boolean(
+      prospect.whatsapp &&
+      prospect.businessType &&
+      prospect.need
     );
 
-    return json(200, {
-      reply,
-      model,
-      effectiveNiche,
-      score,
+    const priority =
+      score >= 80
+        ? 'Muy alta'
+        : score >= 65
+          ? 'Alta'
+          : score >= 40
+            ? 'Media'
+            : 'Baja';
 
-      stage:
-        recommendedMode ===
-        'INTERES_EN_IMPLEMENTAR'
+    const stage =
+      state === 'Listo para contacto'
+        ? 4
+        : state === 'Lead calificado'
           ? 3
-          : 2,
+          : state === 'Lead en conversación'
+            ? 2
+            : 1;
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    return json(200, {
+      reply: cleanString(
+        structured?.reply,
+        1200
+      ),
+
+      model,
+
+      conversationMode:
+        structured?.conversationMode ||
+        'DEMO',
+
+      prospect,
+
+      crm: {
+        nombre: prospect.name,
+        whatsapp: prospect.whatsapp,
+        ciudad: prospect.city,
+        tipoNegocio: prospect.businessType,
+        nicho: prospect.niche,
+        necesidad: prospect.need,
+        urgencia: prospect.urgency,
+        leadScore: score,
+        resumenConversacion: cleanString(
+          structured?.summary,
+          800
+        ),
+        estado: state,
+        proximaAccion: cleanString(
+          structured?.nextAction,
+          250
+        ),
+        fuente: 'Web / Simulador IA'
+      },
+
+      crmReady,
+      nextMissingField,
+
+      score,
+      stage,
 
       stageLabel:
-        recommendedMode ===
-        'INTERES_EN_IMPLEMENTAR'
-          ? 'Interés comercial detectado'
-          : 'Demo de agente IA por nicho',
+        state === 'Listo para contacto'
+          ? 'Lead listo para contacto'
+          : state === 'Lead calificado'
+            ? 'Lead calificado'
+            : structured?.conversationMode === 'COMMERCIAL'
+              ? 'Interés comercial detectado'
+              : structured?.conversationMode === 'DISCOVERY'
+                ? 'Contexto comercial en construcción'
+                : 'Demo de agente IA',
 
-      crmState:
-        'Lead en conversación',
-
-      priority:
-        recommendedMode ===
-        'INTERES_EN_IMPLEMENTAR'
-          ? 'Alta'
-          : 'Media',
+      crmState: state,
+      priority,
 
       nextAction:
-        recommendedMode ===
-        'INTERES_EN_IMPLEMENTAR'
-          ? 'Calificar datos faltantes y llevar a WhatsApp'
-          : 'Demostrar funcionamiento del agente'
+        cleanString(
+          structured?.nextAction,
+          250
+        ) ||
+        (
+          nextMissingField
+            ? `Completar ${nextMissingField}`
+            : 'Continuar conversación'
+        )
     });
 
   } catch (error) {
