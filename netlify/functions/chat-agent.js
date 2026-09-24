@@ -1,253 +1,445 @@
-const Groq = require('groq-sdk');
-
 exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json; charset=utf-8'
   };
+
+  const json = (statusCode, body) => ({
+    statusCode,
+    headers,
+    body: JSON.stringify(body)
+  });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
   }
 
+  const apiKey = process.env.GROQ_API_KEY;
+  const model = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
+
+  // DIAGNÓSTICO DIRECTO
+  // Permite abrir la URL de la función en el navegador
+  // y comprobar Groq sin usar DevTools.
+  if (event.httpMethod === 'GET') {
+    if (!apiKey) {
+      return json(500, {
+        ok: false,
+        model,
+        error: 'GROQ_API_KEY no está configurada en Netlify.'
+      });
+    }
+
+    try {
+      const probeResponse = await fetch(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: 'user',
+                content: 'Responde únicamente con la palabra OK.'
+              }
+            ],
+            temperature: 0.5,
+            max_completion_tokens: 64,
+            reasoning_effort: 'low',
+            include_reasoning: false,
+            stream: false
+          })
+        }
+      );
+
+      const probeData = await probeResponse.json().catch(() => ({}));
+
+      if (!probeResponse.ok) {
+        const upstreamError =
+          probeData?.error?.message ||
+          probeData?.message ||
+          `Groq respondió HTTP ${probeResponse.status}`;
+
+        console.error('GROQ_HEALTH_ERROR', {
+          status: probeResponse.status,
+          model,
+          error: upstreamError
+        });
+
+        return json(502, {
+          ok: false,
+          model,
+          groqStatus: probeResponse.status,
+          error: upstreamError
+        });
+      }
+
+      return json(200, {
+        ok: true,
+        model,
+        groq: 'connected'
+      });
+    } catch (error) {
+      console.error('GROQ_HEALTH_EXCEPTION', error);
+
+      return json(502, {
+        ok: false,
+        model,
+        error: error?.message || 'Error desconocido conectando con Groq.'
+      });
+    }
+  }
+
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+    return json(405, {
+      error: 'Method not allowed'
+    });
   }
 
   try {
-    const { message, niche, context, visitorProfile, history = [] } = JSON.parse(event.body || '{}');
+    if (!apiKey) {
+      return json(500, {
+        reply: null,
+        fallback: true,
+        error: 'GROQ_API_KEY no está configurada en Netlify.'
+      });
+    }
+
+    let body = {};
+
+    try {
+      body = JSON.parse(event.body || '{}');
+    } catch {
+      return json(400, {
+        reply: null,
+        fallback: true,
+        error: 'El cuerpo de la solicitud no es JSON válido.'
+      });
+    }
+
+    const {
+      message,
+      niche,
+      context,
+      visitorProfile = {},
+      history = []
+    } = body;
 
     if (!message || typeof message !== 'string') {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Mensaje vacío' })
-      };
+      return json(400, {
+        reply: null,
+        fallback: true,
+        error: 'Mensaje vacío.'
+      });
     }
-
-    const apiKey = process.env.GROQ_API_KEY;
-
-    if (!apiKey) {
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          reply: null,
-          fallback: true,
-          error: 'GROQ_API_KEY no está configurada en variables de entorno.'
-        })
-      };
-    }
-
-    const groq = new Groq({ apiKey });
 
     const normalizedMessage = message
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
 
-    const hasImplementationIntent = /\b(me interesa|quiero esto|cuanto cuesta|precio|cotiz|implementar|implementarlo|contratar|hablar con guido|contactar a guido|agenda|agendar|quiero una llamada|lo necesito para mi negocio|como empezamos|empecemos)\b/i.test(normalizedMessage);
+    const hasImplementationIntent =
+      /\b(me interesa|quiero esto|cuanto cuesta|precio|cotiz|implementar|implementarlo|contratar|hablar con guido|contactar a guido|agenda|agendar|quiero una llamada|lo necesito para mi negocio|como empezamos|empecemos)\b/i.test(
+        normalizedMessage
+      );
 
-    const hasDirectContactIntent = /\b(mi whatsapp|mi numero es|te dejo mi numero|hablar por whatsapp|pasar a whatsapp|contactame|contáctame)\b/i.test(normalizedMessage);
+    const hasDirectContactIntent =
+      /\b(mi whatsapp|mi numero es|te dejo mi numero|hablar por whatsapp|pasar a whatsapp|contactame)\b/i.test(
+        normalizedMessage
+      );
 
-    const recommendedMode = (hasImplementationIntent || hasDirectContactIntent)
-      ? 'INTERES_EN_IMPLEMENTAR'
-      : 'DEMOSTRACION';
+    const recommendedMode =
+      hasImplementationIntent || hasDirectContactIntent
+        ? 'INTERES_EN_IMPLEMENTAR'
+        : 'DEMOSTRACION';
 
-    const systemPrompt = `
+    // El nicho detectado en la conversación tiene prioridad
+    // sobre el nicho por defecto de la interfaz.
+    const effectiveNiche =
+      visitorProfile?.nicho ||
+      niche ||
+      'general';
+
+    const detectedBusiness =
+      visitorProfile?.tipoNegocio || '';
+
+    const detectedCity =
+      visitorProfile?.city || '';
+
+    const instructions = `
 Eres el agente IA de Guido Paraco, Growth Partner IA en Medellín, Colombia.
 
-IDEA CENTRAL
-Esta landing no tiene un chatbot común. Tiene una demo viva de cómo un agente IA puede atender, filtrar y convertir clientes dentro de un negocio real.
+OBJETIVO
 
-Tu trabajo NO es vender agresivamente desde el inicio.
-Tu trabajo es:
-1. Demostrar cómo funcionaría un agente IA para el negocio del visitante.
-2. Si el visitante muestra interés real, pasar a modo comercial suave.
-3. Si deja datos, guiarlo a continuar por WhatsApp con Guido.
+Esta web muestra una demo viva de cómo un agente IA puede atender, filtrar y convertir clientes de un negocio real.
 
-MODO RECOMENDADO POR EL SISTEMA PARA ESTE TURNO:
+Debes demostrar valor y, cuando exista intención comercial real, calificar al prospecto y llevarlo hacia Guido.
+
+MODO DE ESTE TURNO
+
 ${recommendedMode}
 
-MODO 1 — DEMOSTRACIÓN
-Úsalo cuando el usuario saluda, menciona un negocio, dice que quiere probar, o está explorando.
-En este modo:
-- No pidas WhatsApp demasiado rápido.
-- No vendas de entrada.
-- No hables como asesor genérico.
-- Muestra cómo el agente atendería clientes en ese negocio.
-- Cierra invitando a simular una conversación.
+REGLAS
 
-Formato ideal en demostración:
-1. Confirmas negocio/ciudad si los dijo.
-2. Dices en una frase qué podría hacer el agente.
-3. Haces UNA pregunta para continuar la simulación.
+- No vendas agresivamente si el visitante solo está explorando.
+- Si está explorando, demuestra cómo funcionaría el agente para SU negocio.
+- Si pide precio, implementación, cotización, agenda o hablar con Guido, pasa a modo comercial suave.
+- No inventes precios.
+- No prometas resultados garantizados.
+- Pide solo el dato faltante más importante.
+- Haz máximo una pregunta al final.
+- Máximo 75 palabras, salvo que el usuario pida detalle.
+- Español natural, cercano y profesional.
+- Tono colombiano neutro.
+- No hables como robot.
+- No repitas información que ya esté en el historial o perfil.
+- El negocio y nicho detectados en el mensaje o perfil tienen prioridad sobre cualquier nicho por defecto de la interfaz.
+- NUNCA conviertas una clínica estética en clínica odontológica por un valor predeterminado.
+- Si el usuario corrige un dato, usa el dato más reciente y descarta el anterior.
+- No digas que el CRM guardó datos si el sistema no lo confirmó.
+
+DEMOSTRACIÓN
+
+Cuando el usuario mencione su negocio:
+
+1. Reconoce correctamente el negocio.
+2. Explica brevemente qué podría hacer el agente.
+3. Haz una sola pregunta o invita a simular una conversación.
 
 Ejemplo:
-“Perfecto. Para una clínica estética en Medellín, el agente podría filtrar pacientes por tratamiento, urgencia, horario y datos de contacto antes de pasarlos al equipo. Probemos: escríbeme como si fueras una paciente preguntando por una cita.”
 
-MODO 2 — INTERÉS EN IMPLEMENTAR
-Úsalo si el usuario dice o insinúa:
-- me interesa
-- quiero esto
-- cuánto cuesta
-- precio
-- cotización
-- quiero implementarlo
-- quiero hablar con Guido
-- quiero una llamada
-- agenda
-- contratar
-- lo necesito para mi negocio
+"Perfecto. Para una clínica estética en Medellín, el agente podría filtrar pacientes por tratamiento, intención, horario y datos de contacto antes de pasarlos al equipo. Probemos: escríbeme como si fueras una paciente preguntando por una cita."
 
-En este modo:
-- Responde comercial, pero suave.
-- No inventes precios.
-- Explica que depende del negocio, canales y nivel de sistema.
-- Pide SOLO el dato faltante más importante.
-- Si ya hay suficiente contexto, pide nombre y WhatsApp.
-- Si ya dejó WhatsApp, cierra hacia WhatsApp con Guido.
+INTERÉS EN IMPLEMENTAR
 
-REGLA CLAVE
-Diferencia siempre entre DEMOSTRAR y VENDER:
-- Si el usuario solo menciona un negocio: demuestra.
-- Si el usuario pide precio, implementación, cotización o contacto: vende suave y califica.
+Si existe intención comercial:
 
-NO REPITAS DATOS
-Usa el mensaje actual, historial y perfil detectado.
-No preguntes tipo de negocio si ya lo dijo.
-No preguntes ciudad si ya la dijo.
-No asumas que el negocio real es clínica odontológica solo porque el nicho por defecto sea clínica.
-Si el usuario probó varios negocios en la misma conversación, di:
-“Veo que probaste varios ejemplos. Para orientarte bien: ¿cuál es tu negocio real?”
+- Explica brevemente que el alcance depende del negocio, canales y sistema requerido.
+- Captura progresivamente nombre, WhatsApp, ciudad, negocio, necesidad y urgencia.
+- No vuelvas a pedir información que ya tienes.
+- Si ya dejó WhatsApp o pidió hablar con Guido, orienta el cierre hacia WhatsApp.
 
-TONO
-Español natural, cercano y profesional.
-Tono colombiano neutro.
-No hables como robot.
-No uses párrafos largos.
-Máximo 75 palabras por respuesta, salvo que el usuario pida detalle.
-Haz máximo 1 pregunta al final.
-No uses frases genéricas como “Como inteligencia artificial” o “En el mundo digital actual”.
+CAPACIDADES DE GUIDO
 
-CONTEXTO DE GUIDO
-Guido Paraco es Growth Partner IA en Medellín.
-Ayuda a negocios con inteligencia artificial, agentes IA, automatización, CRM, Meta Ads, WhatsApp, embudos de venta, seguimiento comercial y optimización.
-No vende tareas sueltas: construye sistemas para captar, convertir y retener clientes.
-Mensaje central: “No soy una agencia. Soy tu socio de crecimiento.”
+Guido trabaja con:
 
-NICHOS QUE PUEDES SIMULAR
-Clínicas, estéticas, inmobiliarias, e-commerce, restaurantes, gimnasios, veterinarias, concesionarios, peluquerías, cafeterías y abogados.
-
-CÓMO DEMOSTRAR POR NICHO
-Clínica/estética: filtrar tratamiento, urgencia, ciudad, horario, confianza, valoración y WhatsApp.
-Inmobiliaria: filtrar compra/arriendo, zona, presupuesto, tipo de inmueble e intención real.
-E-commerce: responder dudas, catálogo, pagos, envíos, carrito abandonado y recompra.
-Restaurante/cafetería: reservas, pedidos, horarios, eventos y recurrencia.
-Gym: objetivos, horarios, pase de cortesía, inscripción y seguimiento.
-Veterinaria: mascota, síntoma, urgencia, citas y recordatorios.
-Concesionario: modelo, presupuesto, financiación, retoma y test drive.
-Peluquería: servicio, horario, valoración, color y recordatorios.
-Abogados: clasificar área legal, ciudad, urgencia y documentos. No des asesoría legal definitiva.
-
-MANEJO DE PRECIO
-No des precios específicos.
-Respuesta base:
-“Depende del tipo de negocio, canales y nivel de sistema: agente IA, CRM, automatización, captación o todo conectado.”
-Después pide el dato faltante más importante.
-
-DATOS A CAPTURAR SOLO CUANDO HAY INTERÉS REAL
-- Nombre
+- Agentes IA
+- Automatización
+- CRM
+- Meta Ads
 - WhatsApp
-- Ciudad
-- Tipo de negocio
-- Nicho
-- Necesidad principal
-- Urgencia
+- Embudos
+- Seguimiento comercial
+- Adquisición
+- Conversión
+- Retención
 
-CUÁNDO LLEVAR A WHATSAPP
-Lleva a WhatsApp cuando:
-- El usuario dejó WhatsApp.
-- Pidió hablar con Guido.
-- Pidió cotización, precio o agenda.
-- Tiene urgencia alta.
-- Ya hay nombre, WhatsApp, negocio y necesidad.
+Guido construye sistemas conectados, no solamente tareas aisladas.
 
-Cierre recomendado:
-“Listo, ya tengo el contexto para que Guido no empiece desde cero. El siguiente paso es continuar por WhatsApp y revisar cómo se vería el sistema para tu negocio.”
+GUÍA POR NICHO
 
-IMPORTANTE SOBRE EL BOTÓN DE WHATSAPP
-La web puede mostrar el botón final automáticamente cuando el lead esté listo. Tú puedes invitar a continuar por WhatsApp, pero no digas que el CRM guardó el lead si el sistema no lo confirmó.
+Clínica estética:
+tratamiento, valoración, intención, horario, ciudad, confianza y WhatsApp.
 
-LÍMITES
-No prometas resultados garantizados.
-No digas que ya contactaste a Guido.
-No digas que ya se guardó el lead si el sistema no lo confirmó.
-No pidas datos sensibles innecesarios.
-No des asesoría médica, legal o financiera definitiva.
+Odontología:
+tratamiento, dolor o urgencia, valoración, horario, ciudad y WhatsApp.
 
-CONTEXTO ACTUAL DE LA CONVERSACIÓN
-Nicho seleccionado en la interfaz:
-${niche || 'general'}
+Inmobiliaria:
+compra o arriendo, zona, presupuesto, inmueble e intención.
 
-Contexto del nicho:
+E-commerce:
+producto, dudas, pagos, envíos, carrito y recompra.
+
+Restaurante:
+reservas, pedidos, horarios, eventos y recurrencia.
+
+Gimnasio:
+objetivo, horarios, prueba, inscripción y seguimiento.
+
+Veterinaria:
+mascota, síntoma, urgencia, cita y recordatorios.
+
+Concesionario:
+modelo, presupuesto, financiación, retoma y test drive.
+
+Peluquería:
+servicio, horario, valoración, color y recordatorios.
+
+Abogados:
+área legal, ciudad, urgencia y documentos.
+No des asesoría legal definitiva.
+
+CONTEXTO ACTUAL
+
+Nicho efectivo:
+${effectiveNiche}
+
+Negocio detectado:
+${detectedBusiness || 'no detectado todavía'}
+
+Ciudad detectada:
+${detectedCity || 'no detectada todavía'}
+
+Contexto recibido de la interfaz:
 ${JSON.stringify(context || {})}
 
-Perfil detectado del visitante:
+Perfil detectado:
 ${JSON.stringify(visitorProfile || {})}
 `;
 
+    const safeHistory = Array.isArray(history)
+      ? history.slice(-10).map((item) => ({
+          role:
+            item?.role === 'assistant'
+              ? 'assistant'
+              : 'user',
+          content: String(
+            item?.content || ''
+          ).slice(0, 1000)
+        }))
+      : [];
+
     const messages = [
-      { role: 'system', content: systemPrompt },
-      ...history.slice(-10).map((m) => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: String(m.content || '').slice(0, 800)
-      })),
-      { role: 'user', content: message.slice(0, 1200) }
+      {
+        role: 'user',
+        content:
+          `INSTRUCCIONES DEL AGENTE:\n${instructions}`
+      },
+      ...safeHistory,
+      {
+        role: 'user',
+        content: message.slice(0, 1500)
+      }
     ];
 
-    const completion = await groq.chat.completions.create({
-      model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
-      messages,
-      temperature: 0.65,
-      max_tokens: 220
-    });
+    const groqResponse = await fetch(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.6,
+          max_completion_tokens: 512,
+          reasoning_effort: 'low',
+          include_reasoning: false,
+          stream: false
+        })
+      }
+    );
 
-    const reply = completion.choices?.[0]?.message?.content?.trim();
+    const completion =
+      await groqResponse.json().catch(() => ({}));
 
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        reply,
-        score: 78,
-        stage: 3,
-        stageLabel: recommendedMode === 'INTERES_EN_IMPLEMENTAR'
-          ? 'Interés comercial detectado'
-          : 'Demo de agente IA por nicho',
-        crmState: 'Lead en conversación',
-        priority: recommendedMode === 'INTERES_EN_IMPLEMENTAR' ? 'Alta' : 'Media alta',
-        nextAction: recommendedMode === 'INTERES_EN_IMPLEMENTAR'
-          ? 'Calificar datos y llevar a WhatsApp'
-          : 'Demostrar funcionamiento del agente'
-      })
-    };
+    if (!groqResponse.ok) {
+      const upstreamError =
+        completion?.error?.message ||
+        completion?.message ||
+        `Groq respondió HTTP ${groqResponse.status}`;
 
-  } catch (error) {
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
+      console.error('GROQ_CHAT_ERROR', {
+        status: groqResponse.status,
+        model,
+        error: upstreamError
+      });
+
+      return json(502, {
         reply: null,
         fallback: true,
-        error: error.message
-      })
-    };
+        model,
+        groqStatus: groqResponse.status,
+        error: upstreamError
+      });
+    }
+
+    const reply =
+      completion?.choices?.[0]?.message?.content?.trim();
+
+    if (!reply) {
+      console.error(
+        'GROQ_EMPTY_REPLY',
+        JSON.stringify(completion)
+      );
+
+      return json(502, {
+        reply: null,
+        fallback: true,
+        model,
+        error:
+          'Groq respondió, pero no devolvió contenido utilizable.'
+      });
+    }
+
+    const baseScore =
+      Number(visitorProfile?.leadScore) || 12;
+
+    const score = Math.min(
+      100,
+      Math.max(
+        baseScore,
+        recommendedMode ===
+          'INTERES_EN_IMPLEMENTAR'
+          ? 72
+          : 35
+      )
+    );
+
+    return json(200, {
+      reply,
+      model,
+      effectiveNiche,
+      score,
+
+      stage:
+        recommendedMode ===
+        'INTERES_EN_IMPLEMENTAR'
+          ? 3
+          : 2,
+
+      stageLabel:
+        recommendedMode ===
+        'INTERES_EN_IMPLEMENTAR'
+          ? 'Interés comercial detectado'
+          : 'Demo de agente IA por nicho',
+
+      crmState:
+        'Lead en conversación',
+
+      priority:
+        recommendedMode ===
+        'INTERES_EN_IMPLEMENTAR'
+          ? 'Alta'
+          : 'Media',
+
+      nextAction:
+        recommendedMode ===
+        'INTERES_EN_IMPLEMENTAR'
+          ? 'Calificar datos faltantes y llevar a WhatsApp'
+          : 'Demostrar funcionamiento del agente'
+    });
+
+  } catch (error) {
+    console.error(
+      'CHAT_AGENT_FATAL_ERROR',
+      error
+    );
+
+    return json(500, {
+      reply: null,
+      fallback: true,
+      model,
+      error:
+        error?.message ||
+        'Error interno desconocido en chat-agent.'
+    });
   }
 };
