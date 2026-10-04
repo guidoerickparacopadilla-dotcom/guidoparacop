@@ -762,8 +762,8 @@ function mergeAgentData(data) {
     const prospect = data.prospect || {};
     const crm = data.crm || {};
 
-    if (prospect.name) visitorProfile.name = prospect.name;
-    if (prospect.whatsapp) visitorProfile.phone = prospect.whatsapp;
+    // El modelo puede completar campos no dichos: nombre y teléfono
+    // solo se capturan del texto explícito del visitante.
     if (prospect.city) visitorProfile.city = prospect.city;
     if (prospect.need) visitorProfile.need = prospect.need;
     if (prospect.urgency) visitorProfile.urgency = prospect.urgency;
