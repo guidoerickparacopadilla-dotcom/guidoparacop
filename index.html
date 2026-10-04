@@ -1021,7 +1021,7 @@ function captureCriticalFields(text) {
 
     if (correctedName) {
         visitorProfile.name =
-            correctedName[1].trim();
+            correctedName[1].trim().replace(/\s+y$/i, '');
     }
 }
 async function getLiveAgentResponse(text) {
