@@ -42,3 +42,10 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
 .entity-map a[href*="instagram.com"],.entity-map a[href*="wa.me"]{display:inline-flex;align-items:center;gap:4px;text-decoration:none;overflow-wrap:anywhere}
 .entity-map a[href*="instagram.com"]:hover,.entity-map a[href*="wa.me"]:hover,.foot-bottom a:hover{text-decoration:underline;text-underline-offset:3px}
 .foot-bottom a[href*="wa.me"]{white-space:nowrap}
+
+/* Editorial portraits delivered by Guido — proportion-safe on every screen */
+.gp-about-portrait{display:block;width:min(310px,72vw);height:auto;aspect-ratio:760/1018;object-fit:cover;object-position:center 22%;border-radius:22px;border:1px solid rgba(159,224,162,.30);box-shadow:0 24px 72px rgba(0,0,0,.48),0 0 32px rgba(93,191,97,.10);margin:0 auto 30px}
+.gp-editorial-photo{max-width:100%;background:#121814;object-fit:cover;object-position:50% 25%}
+.gp-editorial .gp-editorial-photo{align-self:stretch;max-height:580px}
+@media(max-width:850px){.gp-editorial .gp-editorial-photo{max-height:480px;align-self:auto;aspect-ratio:4/5;object-position:center 18%}}
+@media(max-width:480px){.gp-about-portrait{width:min(270px,76vw);border-radius:18px}.gp-editorial .gp-editorial-photo{max-height:400px}}
