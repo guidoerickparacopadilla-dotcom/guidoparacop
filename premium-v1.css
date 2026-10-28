@@ -1,0 +1,38 @@
+/* Guido Paraco — mejoras editoriales progresivas. Conserva la galaxia y la identidad visual. */
+:root{--gp-green:#94e899;--gp-cream:#f2f5f0;--gp-muted:#bbc7b9}
+html{scroll-padding-top:105px}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--gp-green);outline-offset:3px}
+.gp-ig-icon{display:inline-block;width:19px;height:19px;vertical-align:-4px;margin-right:6px;color:var(--gp-green)}
+.gp-editorial{position:relative;display:grid;grid-template-columns:1.13fr .87fr;align-items:center;gap:clamp(24px,5vw,68px);padding:clamp(24px,4vw,48px);border-radius:28px;border:1px solid rgba(148,232,153,.21);background:linear-gradient(130deg,rgba(11,19,14,.91),rgba(6,12,9,.77));box-shadow:0 24px 80px rgba(0,0,0,.23);backdrop-filter:blur(10px)}
+.gp-editorial h2{font-size:clamp(2rem,4vw,3.2rem);max-width:18ch;line-height:1.13;margin:12px 0 22px}
+.gp-editorial p{color:#ced6cb;max-width:60ch;font-size:1.04rem;line-height:1.8}
+.gp-editorial-photo{width:100%;height:auto;aspect-ratio:4/5;object-fit:cover;object-position:center 28%;display:block;border-radius:19px;border:1px solid rgba(255,255,255,.12)}
+.gp-eyebrow{display:inline-block;text-transform:uppercase;font-size:.75rem;font-weight:700;letter-spacing:.2em;color:var(--gp-green)}
+.gp-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}
+.gp-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(148,232,153,.4),transparent);margin:32px 0}
+.gp-premium-intro{max-width:850px;margin:0 auto 36px}
+.gp-premium-intro h2{font-size:clamp(1.8rem,3.6vw,3rem);line-height:1.2;margin:12px 0 20px}
+.gp-premium-intro p{color:#c3d0c3;line-height:1.85;font-size:1.05rem}
+.gp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.gp-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.gp-panel{padding:clamp(21px,3vw,31px);background:rgba(8,15,10,.8);border:1px solid rgba(148,232,153,.2);border-radius:19px;backdrop-filter:blur(10px)}
+.gp-panel h3{font-size:1.25rem;line-height:1.3;margin:9px 0 13px}
+.gp-panel p,.gp-panel li{color:#c8d2c7;line-height:1.75}
+.gp-panel ul,.gp-panel ol{padding-left:22px;margin-top:14px}
+.gp-panel li{margin-bottom:8px}
+.gp-panel small{color:var(--gp-green);letter-spacing:.06em;font-weight:650}
+.gp-panel details{margin-top:20px;border-top:1px solid rgba(255,255,255,.12);padding-top:14px}
+.gp-panel summary{cursor:pointer;font-weight:700;color:var(--gp-green)}
+.gp-panel details[open] summary{margin-bottom:13px}
+.gp-panel pre{white-space:pre-wrap;word-break:break-word;font-family:Inter,sans-serif;line-height:1.8;color:#d6e1d4}
+.gp-note{border-left:3px solid rgba(148,232,153,.75);padding:12px 18px;background:rgba(148,232,153,.055);color:#c6d1c4;margin:20px 0;font-size:.9rem;line-height:1.8}
+.gp-textlink{color:var(--gp-green);font-weight:650;text-decoration:underline;text-underline-offset:3px}
+.gp-article{max-width:850px;margin-inline:auto}
+.gp-article h2{font-size:clamp(1.7rem,3vw,2.4rem);margin:32px 0 12px}
+.gp-article h3{font-size:1.25rem;margin:28px 0 10px}
+.gp-article p{color:#cbd6c9;font-size:1.03rem;line-height:1.94;margin:14px 0}
+.gp-article ul,.gp-article ol{padding-left:23px;margin:17px 0;color:#cbd6c9;line-height:1.9}
+.gp-article li{margin-bottom:8px}
+@media(max-width:850px){.gp-editorial{grid-template-columns:1fr}.gp-editorial-photo{max-height:500px;width:100%}.gp-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.gp-grid,.gp-grid.two{grid-template-columns:1fr}.gp-editorial{padding:23px}}
+@media(prefers-reduced-motion:reduce){.gp-editorial,.gp-panel{transition:none!important;animation:none!important}}
