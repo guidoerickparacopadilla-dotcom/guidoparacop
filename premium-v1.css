@@ -36,3 +36,9 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
 @media(max-width:850px){.gp-editorial{grid-template-columns:1fr}.gp-editorial-photo{max-height:500px;width:100%}.gp-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.gp-grid,.gp-grid.two{grid-template-columns:1fr}.gp-editorial{padding:23px}}
 @media(prefers-reduced-motion:reduce){.gp-editorial,.gp-panel{transition:none!important;animation:none!important}}
+
+/* Native social brand icons: Instagram gradient and WhatsApp green, with accessible focus styles */
+.gp-social-icon{display:inline-block;width:20px;height:20px;vertical-align:-5px;margin-right:5px;flex:none;border:0;object-fit:contain}
+.entity-map a[href*="instagram.com"],.entity-map a[href*="wa.me"]{display:inline-flex;align-items:center;gap:4px;text-decoration:none;overflow-wrap:anywhere}
+.entity-map a[href*="instagram.com"]:hover,.entity-map a[href*="wa.me"]:hover,.foot-bottom a:hover{text-decoration:underline;text-underline-offset:3px}
+.foot-bottom a[href*="wa.me"]{white-space:nowrap}
