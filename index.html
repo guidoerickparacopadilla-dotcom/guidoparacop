@@ -111,20 +111,15 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
 <meta name="ICBM" content="6.2442, -75.5812" />
 <link rel="icon" href="/favicon-gp.svg" type="image/svg+xml"/><link rel="stylesheet" href="/premium-v1.css"/>
 <style id="gp-hero-typewriter-style">
-/* Hero typewriter V2: no layout reflow, keeps existing text and galaxy unchanged. */
+/* Hero letter reveal V4: compositor-driven; no layout changes or WebGL dependencies. */
 .gp-typewriter-word{white-space:nowrap}
-.gp-typewriter-letter{position:relative}
-.gp-typewriter-active .gp-typewriter-letter{opacity:0;transition:opacity 65ms ease-out}
-.gp-typewriter-active .gp-typewriter-letter.gp-typewriter-visible{opacity:1}
-.gp-typewriter-active .gp-typewriter-letter.gp-typewriter-cursor::after{
-  content:"";position:absolute;right:-2px;top:.05em;
-  height:.85em;width:2px;background:#a1e5a4;
-  animation:gp-typewriter-caret .75s step-end infinite;pointer-events:none
+.gp-typewriter-active .gp-typewriter-letter{opacity:0}
+.gp-typewriter-active.gp-typewriter-playing .gp-typewriter-letter{
+  animation:gp-letter-reveal 1ms step-end both;
 }
-@keyframes gp-typewriter-caret{50%{opacity:0}}
+@keyframes gp-letter-reveal{to{opacity:1}}
 @media(prefers-reduced-motion:reduce){
-  .gp-typewriter-active .gp-typewriter-letter{opacity:1!important;transition:none!important}
-  .gp-typewriter-cursor::after{display:none!important}
+  .gp-typewriter-active .gp-typewriter-letter{opacity:1!important;animation:none!important}
 }
 </style>
 </head>
@@ -173,15 +168,20 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
     <div class="scroll-hint"><span>scroll</span><span class="line"></span></div>
   </header>
 <script id="gp-hero-typewriter">
-/* One-time, visible typing after DOM ready, with reduced-motion and no-JS fallback. */
+/* V4: Start before delayed media resources; reveal letters on CSS timeline. */
 (()=>{
   const target=document.querySelector('.hero h1 em.grad');
-  if(!target || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if(!target) return;
+  const heading=target.closest('h1');
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    if(heading) heading.classList.add('in');
+    return;
+  }
   const message=target.textContent;
   const tokens=message.match(/\S+|\s+/gu);
   if(!tokens) return;
   const fragment=document.createDocumentFragment();
-  const letters=[];
+  let letterIndex=0;
   for(const token of tokens){
     if(/^\s+$/u.test(token)){
       fragment.appendChild(document.createTextNode(token));
@@ -193,62 +193,29 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
       const letter=document.createElement('span');
       letter.className='gp-typewriter-letter';
       letter.textContent=glyph;
+      letter.style.animationDelay=(900+letterIndex*90)+'ms';
       word.appendChild(letter);
-      letters.push(letter);
+      letterIndex++;
     }
     fragment.appendChild(word);
   }
-  if(!letters.length) return;
   target.replaceChildren(fragment);
-  target.classList.add('gp-typewriter-active');
   target.setAttribute('aria-label',message);
-  let started=false;
-  let lastCursor=null;
-  const showAll=()=>{
-    for(const letter of letters){
-      letter.classList.add('gp-typewriter-visible');
-      letter.classList.remove('gp-typewriter-cursor');
-    }
-  };
-  const run=()=>{
-    if(started) return;
-    if(document.visibilityState==='hidden'){
-      document.addEventListener('visibilitychange',run,{once:true});
-      return;
-    }
-    started=true;
-    let pos=0;
-    const next=()=>{
-      if(lastCursor) lastCursor.classList.remove('gp-typewriter-cursor');
-      if(pos>=letters.length){
-        window.setTimeout(showAll,280);
-        return;
-      }
-      const letter=letters[pos++];
-      letter.classList.add('gp-typewriter-visible','gp-typewriter-cursor');
-      lastCursor=letter;
-      window.setTimeout(next,85);
-    };
-    next();
-  };
-  /* Do not type while the hero's existing reveal animation still hides the H1. */
-  const schedule=()=>{
-    const heading=target.closest('h1');
-    if(!heading) { showAll(); return; }
-    let scheduled=false;
-    const observer=new MutationObserver(()=>{
-      if(scheduled || !heading.classList.contains('in')) return;
-      scheduled=true;
-      observer.disconnect();
-      window.setTimeout(run,900);
+  target.classList.add('gp-typewriter-active');
+  /* Make the existing reveal animation visible promptly, without waiting for other assets. */
+  if(heading) heading.classList.add('in');
+  const play=()=>{
+    window.requestAnimationFrame(()=>{
+      window.requestAnimationFrame(()=>target.classList.add('gp-typewriter-playing'));
     });
-    observer.observe(heading,{attributes:true,attributeFilter:['class']});
-    if(heading.classList.contains('in')){
-      scheduled=true;observer.disconnect();window.setTimeout(run,900);
-    }
   };
-  schedule();
-  window.setTimeout(showAll,14000); // failsafe: never leave the headline blank.
+  if(document.visibilityState==='hidden'){
+    document.addEventListener('visibilitychange',play,{once:true});
+  }else play();
+  /* Fail-safe: text remains readable even if CSS animations are blocked. */
+  window.setTimeout(()=>{
+    target.classList.remove('gp-typewriter-active','gp-typewriter-playing');
+  },9500);
 })();
 </script>
 
