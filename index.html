@@ -111,16 +111,9 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
 <meta name="ICBM" content="6.2442, -75.5812" />
 <link rel="icon" href="/favicon-gp.svg" type="image/svg+xml"/><link rel="stylesheet" href="/premium-v1.css"/>
 <style id="gp-hero-typewriter-style">
-/* Hero letter reveal V4: compositor-driven; no layout changes or WebGL dependencies. */
-.gp-typewriter-word{white-space:nowrap}
-.gp-typewriter-active .gp-typewriter-letter{opacity:0}
-.gp-typewriter-active.gp-typewriter-playing .gp-typewriter-letter{
-  animation:gp-letter-reveal 1ms step-end both;
-}
-@keyframes gp-letter-reveal{to{opacity:1}}
-@media(prefers-reduced-motion:reduce){
-  .gp-typewriter-active .gp-typewriter-letter{opacity:1!important;animation:none!important}
-}
+/* AI Growth Infrastructure and AI-Native remain visible, independent of motion. */
+.gp-ai-native{color:#d7f4dc;opacity:.86;font-weight:600;letter-spacing:.11em}
+@media(max-width:520px){.gp-ai-native{display:inline-block;letter-spacing:.06em}}
 </style>
 </head>
 <body id="top">
@@ -153,7 +146,7 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
   </div>
 
   <header class="hero container">
-    <span class="eyebrow reveal"><span class="live"></span>AI-Powered Growth Partner</span>
+    <span class="eyebrow reveal"><span class="live"></span>AI Growth Infrastructure <span class="gp-ai-native">· AI-Native</span></span>
     <h1 class="reveal d1">Tu negocio necesita algo más que atención. <em class="grad">Necesita convertirla en oportunidades.</em></h1>
     <p class="lead reveal d2">Soy Guido Paraco, AI-Powered Growth Partner. Ayudo a fundadores y empresas a convertir atención en conversaciones útiles, seguimiento y oportunidades comerciales. <strong>Primero entendemos el cuello de botella; después diseñamos la solución.</strong></p>
     <div class="hero-cta reveal d3">
@@ -168,54 +161,51 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
     <div class="scroll-hint"><span>scroll</span><span class="line"></span></div>
   </header>
 <script id="gp-hero-typewriter">
-/* V4: Start before delayed media resources; reveal letters on CSS timeline. */
+/* V5: Real text-node typing. No per-letter opacity, masks, carets or bars. */
 (()=>{
   const target=document.querySelector('.hero h1 em.grad');
   if(!target) return;
   const heading=target.closest('h1');
-  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
-    if(heading) heading.classList.add('in');
+  const message=target.textContent;
+  const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduced){
+    if(heading)heading.classList.add('in');
     return;
   }
-  const message=target.textContent;
-  const tokens=message.match(/\S+|\s+/gu);
-  if(!tokens) return;
-  const fragment=document.createDocumentFragment();
-  let letterIndex=0;
-  for(const token of tokens){
-    if(/^\s+$/u.test(token)){
-      fragment.appendChild(document.createTextNode(token));
-      continue;
-    }
-    const word=document.createElement('span');
-    word.className='gp-typewriter-word';
-    for(const glyph of Array.from(token)){
-      const letter=document.createElement('span');
-      letter.className='gp-typewriter-letter';
-      letter.textContent=glyph;
-      letter.style.animationDelay=(900+letterIndex*90)+'ms';
-      word.appendChild(letter);
-      letterIndex++;
-    }
-    fragment.appendChild(word);
+  const letters=Array.from(message);
+  if(!letters.length)return;
+  /* Preserve vertical space so the CTA never jumps while text is being typed. */
+  if(heading){
+    const originalHeight=heading.getBoundingClientRect().height;
+    if(originalHeight>0)heading.style.minHeight=Math.ceil(originalHeight)+'px';
+    heading.setAttribute('aria-label',heading.textContent.trim());
   }
-  target.replaceChildren(fragment);
-  target.setAttribute('aria-label',message);
-  target.classList.add('gp-typewriter-active');
-  /* Make the existing reveal animation visible promptly, without waiting for other assets. */
-  if(heading) heading.classList.add('in');
-  const play=()=>{
-    window.requestAnimationFrame(()=>{
-      window.requestAnimationFrame(()=>target.classList.add('gp-typewriter-playing'));
-    });
+  target.setAttribute('aria-hidden','true');
+  target.textContent='';
+  if(heading)heading.classList.add('in');
+  let index=0;
+  const finish=()=>{
+    target.textContent=message;
+    index=letters.length;
+    if(heading)heading.style.minHeight='';
   };
-  if(document.visibilityState==='hidden'){
-    document.addEventListener('visibilitychange',play,{once:true});
-  }else play();
-  /* Fail-safe: text remains readable even if CSS animations are blocked. */
+  const tick=()=>{
+    if(index>=letters.length){
+      if(heading)heading.style.minHeight='';
+      return;
+    }
+    if(document.hidden){
+      window.setTimeout(tick,120);
+      return;
+    }
+    target.textContent=letters.slice(0,++index).join('');
+    window.setTimeout(tick,86);
+  };
+  window.setTimeout(tick,900);
+  /* Safety: even if scripts are throttled, eventually display the full text. */
   window.setTimeout(()=>{
-    target.classList.remove('gp-typewriter-active','gp-typewriter-playing');
-  },9500);
+    if(index<letters.length)finish();
+  },12500);
 })();
 </script>
 
