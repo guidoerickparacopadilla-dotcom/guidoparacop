@@ -194,10 +194,7 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
       if(heading)heading.style.minHeight='';
       return;
     }
-    if(document.hidden){
-      window.setTimeout(tick,120);
-      return;
-    }
+    /* Continue typing even when a browser temporarily reports the tab as hidden. */
     target.textContent=letters.slice(0,++index).join('');
     window.setTimeout(tick,86);
   };
