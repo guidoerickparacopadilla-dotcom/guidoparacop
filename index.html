@@ -110,6 +110,18 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
 <meta name="geo.position" content="6.2442;-75.5812" />
 <meta name="ICBM" content="6.2442, -75.5812" />
 <link rel="icon" href="/favicon-gp.svg" type="image/svg+xml"/><link rel="stylesheet" href="/premium-v1.css"/>
+<style id="gp-hero-typewriter-style">
+/* Animación de la segunda frase del hero: sin reflow ni cambios al fondo galáctico. */
+.gp-typewriter-word{white-space:nowrap}
+.gp-typewriter-active .gp-typewriter-letter{opacity:0}
+.gp-typewriter-active.gp-typewriter-playing .gp-typewriter-letter{
+  animation:gp-typewriter-reveal 1ms step-end both
+}
+@keyframes gp-typewriter-reveal{to{opacity:1}}
+@media(prefers-reduced-motion:reduce){
+  .gp-typewriter-active .gp-typewriter-letter{opacity:1!important;animation:none!important}
+}
+</style>
 </head>
 <body id="top">
 
@@ -1876,5 +1888,39 @@ const nav=document.getElementById('nav');
 window.addEventListener('scroll',()=>{if(window.scrollY>40)nav.classList.add('scrolled');else nav.classList.remove('scrolled');},{passive:true});
 </script>
 
+<script id="gp-hero-typewriter">
+/* Progressive enhancement: el H1 original queda intacto si JavaScript está desactivado. */
+(()=>{
+  const target=document.querySelector('.hero h1 em.grad');
+  if(!target || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const original=target.textContent;
+  const pieces=original.match(/\S+|\s+/gu);
+  if(!pieces) return;
+  const content=document.createDocumentFragment();
+  let letterNumber=0;
+  for(const piece of pieces){
+    if(/^\s+$/u.test(piece)){
+      content.appendChild(document.createTextNode(piece));
+      continue;
+    }
+    const word=document.createElement('span');
+    word.className='gp-typewriter-word';
+    for(const letter of Array.from(piece)){
+      const char=document.createElement('span');
+      char.className='gp-typewriter-letter';
+      char.textContent=letter;
+      char.style.animationDelay=(130+letterNumber*45)+'ms';
+      letterNumber++;
+      word.appendChild(char);
+    }
+    content.appendChild(word);
+  }
+  target.replaceChildren(content);
+  target.classList.add('gp-typewriter-active');
+  const start=()=>window.setTimeout(()=>target.classList.add('gp-typewriter-playing'),500);
+  if(document.readyState==='complete') start();
+  else window.addEventListener('load',start,{once:true});
+})();
+</script>
 </body>
 </html>
