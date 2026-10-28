@@ -172,6 +172,86 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
     </div>
     <div class="scroll-hint"><span>scroll</span><span class="line"></span></div>
   </header>
+<script id="gp-hero-typewriter">
+/* One-time, visible typing after DOM ready, with reduced-motion and no-JS fallback. */
+(()=>{
+  const target=document.querySelector('.hero h1 em.grad');
+  if(!target || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const message=target.textContent;
+  const tokens=message.match(/\S+|\s+/gu);
+  if(!tokens) return;
+  const fragment=document.createDocumentFragment();
+  const letters=[];
+  for(const token of tokens){
+    if(/^\s+$/u.test(token)){
+      fragment.appendChild(document.createTextNode(token));
+      continue;
+    }
+    const word=document.createElement('span');
+    word.className='gp-typewriter-word';
+    for(const glyph of Array.from(token)){
+      const letter=document.createElement('span');
+      letter.className='gp-typewriter-letter';
+      letter.textContent=glyph;
+      word.appendChild(letter);
+      letters.push(letter);
+    }
+    fragment.appendChild(word);
+  }
+  if(!letters.length) return;
+  target.replaceChildren(fragment);
+  target.classList.add('gp-typewriter-active');
+  target.setAttribute('aria-label',message);
+  let started=false;
+  let lastCursor=null;
+  const showAll=()=>{
+    for(const letter of letters){
+      letter.classList.add('gp-typewriter-visible');
+      letter.classList.remove('gp-typewriter-cursor');
+    }
+  };
+  const run=()=>{
+    if(started) return;
+    if(document.visibilityState==='hidden'){
+      document.addEventListener('visibilitychange',run,{once:true});
+      return;
+    }
+    started=true;
+    let pos=0;
+    const next=()=>{
+      if(lastCursor) lastCursor.classList.remove('gp-typewriter-cursor');
+      if(pos>=letters.length){
+        window.setTimeout(showAll,280);
+        return;
+      }
+      const letter=letters[pos++];
+      letter.classList.add('gp-typewriter-visible','gp-typewriter-cursor');
+      lastCursor=letter;
+      window.setTimeout(next,85);
+    };
+    next();
+  };
+  /* Do not type while the hero's existing reveal animation still hides the H1. */
+  const schedule=()=>{
+    const heading=target.closest('h1');
+    if(!heading) { showAll(); return; }
+    let scheduled=false;
+    const observer=new MutationObserver(()=>{
+      if(scheduled || !heading.classList.contains('in')) return;
+      scheduled=true;
+      observer.disconnect();
+      window.setTimeout(run,900);
+    });
+    observer.observe(heading,{attributes:true,attributeFilter:['class']});
+    if(heading.classList.contains('in')){
+      scheduled=true;observer.disconnect();window.setTimeout(run,900);
+    }
+  };
+  schedule();
+  window.setTimeout(showAll,14000); // failsafe: never leave the headline blank.
+})();
+</script>
+
 
   <section class="container" aria-label="Guido Paraco" style="padding-top:30px"><div class="gp-editorial"><div><span class="gp-eyebrow">Growth + criterio + IA</span><h2>Menos herramientas sueltas. Más claridad comercial.</h2><p>Trabajo con fundadores que quieren liberar tiempo, sostener su presencia digital y mejorar el recorrido desde el primer mensaje hasta el seguimiento. La estrategia comienza por una conversación sobre el negocio, no por una lista de software.</p><div class="gp-actions"><a class="btn btn-wa" href="/contacto/">Conversemos sobre tu negocio</a><a class="btn btn-ghost" href="/sobre/">Conoce mi historia</a></div></div><img class="gp-editorial-photo" src="/guido-editorial-exterior.webp" alt="Guido Paraco de pie frente a una fachada moderna en Medellín" loading="lazy" decoding="async" width="760" height="1018"/></div></section>
 <section id="problema" style="padding-top:40px">
@@ -1893,89 +1973,6 @@ const nav=document.getElementById('nav');
 window.addEventListener('scroll',()=>{if(window.scrollY>40)nav.classList.add('scrolled');else nav.classList.remove('scrolled');},{passive:true});
 </script>
 
-<script id="gp-hero-typewriter">
-/* One-time, visible typing after DOM ready, with reduced-motion and no-JS fallback. */
-(()=>{
-  const target=document.querySelector('.hero h1 em.grad');
-  if(!target || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const message=target.textContent;
-  const tokens=message.match(/\S+|\s+/gu);
-  if(!tokens) return;
-  const fragment=document.createDocumentFragment();
-  const letters=[];
-  for(const token of tokens){
-    if(/^\s+$/u.test(token)){
-      fragment.appendChild(document.createTextNode(token));
-      continue;
-    }
-    const word=document.createElement('span');
-    word.className='gp-typewriter-word';
-    for(const glyph of Array.from(token)){
-      const letter=document.createElement('span');
-      letter.className='gp-typewriter-letter';
-      letter.textContent=glyph;
-      word.appendChild(letter);
-      letters.push(letter);
-    }
-    fragment.appendChild(word);
-  }
-  if(!letters.length) return;
-  target.replaceChildren(fragment);
-  target.classList.add('gp-typewriter-active');
-  target.setAttribute('aria-label',message);
-  let started=false;
-  let lastCursor=null;
-  const showAll=()=>{
-    for(const letter of letters){
-      letter.classList.add('gp-typewriter-visible');
-      letter.classList.remove('gp-typewriter-cursor');
-    }
-  };
-  const run=()=>{
-    if(started) return;
-    if(document.visibilityState==='hidden'){
-      document.addEventListener('visibilitychange',run,{once:true});
-      return;
-    }
-    started=true;
-    let pos=0;
-    const next=()=>{
-      if(lastCursor) lastCursor.classList.remove('gp-typewriter-cursor');
-      if(pos>=letters.length){
-        window.setTimeout(showAll,280);
-        return;
-      }
-      const letter=letters[pos++];
-      letter.classList.add('gp-typewriter-visible','gp-typewriter-cursor');
-      lastCursor=letter;
-      window.setTimeout(next,85);
-    };
-    next();
-  };
-  const schedule=()=>{
-    const heading=target.closest('h1');
-    if(!heading || !('IntersectionObserver' in window)){
-      window.setTimeout(run,1050);
-      return;
-    }
-    const observer=new IntersectionObserver(entries=>{
-      if(entries.some(entry=>entry.isIntersecting)){
-        observer.disconnect();
-        window.setTimeout(run,1050);
-      }
-    },{threshold:0.2});
-    observer.observe(heading);
-    window.setTimeout(()=>{
-      if(!started && heading.getBoundingClientRect().top<innerHeight) {
-        observer.disconnect();
-        run();
-      }
-    },3200);
-  };
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',schedule,{once:true});
-  else schedule();
-  window.setTimeout(showAll,14000); // failsafe: never leave the headline blank.
-})();
-</script>
+
 </body>
 </html>
