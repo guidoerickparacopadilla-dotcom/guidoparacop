@@ -111,15 +111,20 @@ src="https://www.facebook.com/tr?id=1212819244097155&ev=PageView&noscript=1"
 <meta name="ICBM" content="6.2442, -75.5812" />
 <link rel="icon" href="/favicon-gp.svg" type="image/svg+xml"/><link rel="stylesheet" href="/premium-v1.css"/>
 <style id="gp-hero-typewriter-style">
-/* Animación de la segunda frase del hero: sin reflow ni cambios al fondo galáctico. */
+/* Hero typewriter V2: no layout reflow, keeps existing text and galaxy unchanged. */
 .gp-typewriter-word{white-space:nowrap}
-.gp-typewriter-active .gp-typewriter-letter{opacity:0}
-.gp-typewriter-active.gp-typewriter-playing .gp-typewriter-letter{
-  animation:gp-typewriter-reveal 1ms step-end both
+.gp-typewriter-letter{position:relative}
+.gp-typewriter-active .gp-typewriter-letter{opacity:0;transition:opacity 65ms ease-out}
+.gp-typewriter-active .gp-typewriter-letter.gp-typewriter-visible{opacity:1}
+.gp-typewriter-active .gp-typewriter-letter.gp-typewriter-cursor::after{
+  content:"";position:absolute;right:-2px;top:.05em;
+  height:.85em;width:2px;background:#a1e5a4;
+  animation:gp-typewriter-caret .75s step-end infinite;pointer-events:none
 }
-@keyframes gp-typewriter-reveal{to{opacity:1}}
+@keyframes gp-typewriter-caret{50%{opacity:0}}
 @media(prefers-reduced-motion:reduce){
-  .gp-typewriter-active .gp-typewriter-letter{opacity:1!important;animation:none!important}
+  .gp-typewriter-active .gp-typewriter-letter{opacity:1!important;transition:none!important}
+  .gp-typewriter-cursor::after{display:none!important}
 }
 </style>
 </head>
@@ -1889,37 +1894,87 @@ window.addEventListener('scroll',()=>{if(window.scrollY>40)nav.classList.add('sc
 </script>
 
 <script id="gp-hero-typewriter">
-/* Progressive enhancement: el H1 original queda intacto si JavaScript está desactivado. */
+/* One-time, visible typing after DOM ready, with reduced-motion and no-JS fallback. */
 (()=>{
   const target=document.querySelector('.hero h1 em.grad');
   if(!target || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const original=target.textContent;
-  const pieces=original.match(/\S+|\s+/gu);
-  if(!pieces) return;
-  const content=document.createDocumentFragment();
-  let letterNumber=0;
-  for(const piece of pieces){
-    if(/^\s+$/u.test(piece)){
-      content.appendChild(document.createTextNode(piece));
+  const message=target.textContent;
+  const tokens=message.match(/\S+|\s+/gu);
+  if(!tokens) return;
+  const fragment=document.createDocumentFragment();
+  const letters=[];
+  for(const token of tokens){
+    if(/^\s+$/u.test(token)){
+      fragment.appendChild(document.createTextNode(token));
       continue;
     }
     const word=document.createElement('span');
     word.className='gp-typewriter-word';
-    for(const letter of Array.from(piece)){
-      const char=document.createElement('span');
-      char.className='gp-typewriter-letter';
-      char.textContent=letter;
-      char.style.animationDelay=(130+letterNumber*45)+'ms';
-      letterNumber++;
-      word.appendChild(char);
+    for(const glyph of Array.from(token)){
+      const letter=document.createElement('span');
+      letter.className='gp-typewriter-letter';
+      letter.textContent=glyph;
+      word.appendChild(letter);
+      letters.push(letter);
     }
-    content.appendChild(word);
+    fragment.appendChild(word);
   }
-  target.replaceChildren(content);
+  if(!letters.length) return;
+  target.replaceChildren(fragment);
   target.classList.add('gp-typewriter-active');
-  const start=()=>window.setTimeout(()=>target.classList.add('gp-typewriter-playing'),500);
-  if(document.readyState==='complete') start();
-  else window.addEventListener('load',start,{once:true});
+  target.setAttribute('aria-label',message);
+  let started=false;
+  let lastCursor=null;
+  const showAll=()=>{
+    for(const letter of letters){
+      letter.classList.add('gp-typewriter-visible');
+      letter.classList.remove('gp-typewriter-cursor');
+    }
+  };
+  const run=()=>{
+    if(started) return;
+    if(document.visibilityState==='hidden'){
+      document.addEventListener('visibilitychange',run,{once:true});
+      return;
+    }
+    started=true;
+    let pos=0;
+    const next=()=>{
+      if(lastCursor) lastCursor.classList.remove('gp-typewriter-cursor');
+      if(pos>=letters.length){
+        window.setTimeout(showAll,280);
+        return;
+      }
+      const letter=letters[pos++];
+      letter.classList.add('gp-typewriter-visible','gp-typewriter-cursor');
+      lastCursor=letter;
+      window.setTimeout(next,85);
+    };
+    next();
+  };
+  const schedule=()=>{
+    const heading=target.closest('h1');
+    if(!heading || !('IntersectionObserver' in window)){
+      window.setTimeout(run,1050);
+      return;
+    }
+    const observer=new IntersectionObserver(entries=>{
+      if(entries.some(entry=>entry.isIntersecting)){
+        observer.disconnect();
+        window.setTimeout(run,1050);
+      }
+    },{threshold:0.2});
+    observer.observe(heading);
+    window.setTimeout(()=>{
+      if(!started && heading.getBoundingClientRect().top<innerHeight) {
+        observer.disconnect();
+        run();
+      }
+    },3200);
+  };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',schedule,{once:true});
+  else schedule();
+  window.setTimeout(showAll,14000); // failsafe: never leave the headline blank.
 })();
 </script>
 </body>
