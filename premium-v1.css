@@ -49,3 +49,6 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
 .gp-editorial .gp-editorial-photo{align-self:stretch;max-height:580px}
 @media(max-width:850px){.gp-editorial .gp-editorial-photo{max-height:480px;align-self:auto;aspect-ratio:4/5;object-position:center 18%}}
 @media(max-width:480px){.gp-about-portrait{width:min(270px,76vw);border-radius:18px}.gp-editorial .gp-editorial-photo{max-height:400px}}
+
+/* Anchor navigation: show NEXUS below the sticky header on mobile and desktop. */
+#simulador{scroll-margin-top:clamp(78px,11vh,118px)}
