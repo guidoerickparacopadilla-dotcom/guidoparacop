@@ -289,7 +289,9 @@ exports.handler = async (event) => {
         visitorProfile?.urgency,
         30
       ),
-      realBusinessConfirmed: Boolean(visitorProfile?.realBusinessConfirmed)
+      realBusinessConfirmed: Boolean(visitorProfile?.realBusinessConfirmed),
+      implementationIntent: Boolean(visitorProfile?.implementationIntent),
+      wantsGuido: Boolean(visitorProfile?.wantsGuido)
     };
 
     // ==========================================
