@@ -9,6 +9,11 @@ GuidoOS es una One Person Company (OPC) AI-Native multidivisional que diseña e 
 - [Business Operating Systems](https://guidoparaco.com/servicios/business-operating-systems/): Diseño e implementación de sistemas operativos empresariales: procesos, conocimiento, automatización, agentes IA, integraciones y observabilidad.
 - [Digital Reset](https://guidoparaco.com/servicios/digital-reset/): Organización digital para personas y profesionales: archivos, correo, dispositivos, almacenamiento, conocimiento y flujos de trabajo.
 
+- [Mapas estratégicos A → B](https://guidoparaco.com/servicios/mapas-estrategicos/): Mapas estratégicos personalizados A → B: situación actual, objetivo, tiempo, recursos, capacidades, prioridades, ejecución y seguimiento para personas, profesionales y empresas.
+- Social Media Automation & AI Content: automatización integral de investigación, estrategia, guiones, producción, publicación bajo permisos, distribución, medición y optimización con dirección humana.
+- Digital Reset: Digital Reset — organización y limpieza digital integral de archivos, correo, dispositivos, conocimiento y flujos de trabajo para personas, profesionales y empresas.
+- Soluciones personalizadas: diagnóstico de viabilidad y diseño tecnológico según el reto.
+
 ## Fuentes oficiales
 - [GuidoOS y modelo OPC](https://guidoparaco.com/guidoos/)
 - [Fundador](https://guidoparaco.com/sobre/)
