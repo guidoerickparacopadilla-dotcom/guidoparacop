@@ -1,12 +1,17 @@
 # Guido Paraco | GuidoOS
 
-> One Person Company AI-Native en construcción, liderada por Guido Paraco desde Medellín, Colombia, con visión global.
+> Guido Paraco es el fundador y constructor de GuidoOS, una One Person Company (OPC) AI-Native multidivisional con base en Medellín, Colombia y visión global.
 
-Pensamiento crítico, crecimiento comercial, sistemas empresariales, agentes de IA y automatización. Digital Reset es una línea en validación. No se declara presencia multinacional ni resultados no comprobados.
+GuidoOS es una One Person Company (OPC) AI-Native multidivisional que diseña e implementa sistemas de crecimiento, operación empresarial y organización digital. Pensamiento crítico, inteligencia artificial y ejecución orientada a resultados.
+
+## Divisiones y servicios
+- [AI-Powered Growth Partner](https://guidoparaco.com/servicios/growth-marketing/): Sistemas de adquisición, autoridad, contenido, SEO/GEO, publicidad, conversión, CRM y seguimiento comercial para fundadores y empresas.
+- [Business Operating Systems](https://guidoparaco.com/servicios/business-operating-systems/): Diseño e implementación de sistemas operativos empresariales: procesos, conocimiento, automatización, agentes IA, integraciones y observabilidad.
+- [Digital Reset](https://guidoparaco.com/servicios/digital-reset/): Organización digital para personas y profesionales: archivos, correo, dispositivos, almacenamiento, conocimiento y flujos de trabajo.
 
 ## Fuentes oficiales
 - [GuidoOS y modelo OPC](https://guidoparaco.com/guidoos/)
 - [Fundador](https://guidoparaco.com/sobre/)
-- [Servicios](https://guidoparaco.com/servicios/)
+- [Catálogo de servicios](https://guidoparaco.com/servicios/)
 - [Identidad digital](https://guidoparaco.com/geo/)
 - [Contacto](https://guidoparaco.com/contacto/)
