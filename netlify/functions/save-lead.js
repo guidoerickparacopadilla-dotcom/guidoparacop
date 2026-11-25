@@ -257,8 +257,7 @@ exports.handler = async (event) => {
           status:
             response.status,
 
-          response:
-            responseText
+          responseType: response.headers.get('content-type')
         }
       );
 
@@ -266,11 +265,7 @@ exports.handler = async (event) => {
         ok: false,
         error:
           `El CRM respondió HTTP ${response.status}.`,
-        googleResponse:
-          responseText.slice(
-            0,
-            500
-          )
+        code: 'CRM_HTTP_ERROR'
       });
     }
 
@@ -289,25 +284,20 @@ exports.handler = async (event) => {
     }
 
     if (
-      parsedResponse &&
-      (
-        parsedResponse.ok === false ||
-        parsedResponse.success === false ||
-        parsedResponse.error
-      )
+      !parsedResponse ||
+      parsedResponse.error ||
+      (parsedResponse.ok !== true && parsedResponse.success !== true)
     ) {
       console.error(
         'CRM_WEBHOOK_REPORTED_ERROR',
-        parsedResponse
+        { confirmed: false }
       );
 
       return respond(502, {
         ok: false,
         error:
-          parsedResponse.error ||
-          'Google Apps Script reportó un error.',
-        googleResponse:
-          parsedResponse
+          'El webhook no confirmó el registro con ok:true o success:true.',
+        code: 'CRM_ACK_UNVERIFIED'
       });
     }
 
@@ -319,13 +309,7 @@ exports.handler = async (event) => {
       ok: true,
       message:
         'Lead enviado correctamente al CRM.',
-      payload,
-      googleResponse:
-        parsedResponse ||
-        responseText.slice(
-          0,
-          500
-        )
+      confirmed: true
     });
 
   } catch (error) {
