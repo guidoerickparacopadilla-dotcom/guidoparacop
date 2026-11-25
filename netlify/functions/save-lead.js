@@ -52,6 +52,10 @@ exports.handler = async (event) => {
       });
     }
 
+    if (data.fuente === 'Web / Simulador IA' && data.contactConsent !== true) {
+      return respond(400, { ok: false, error: 'Se requiere autorización de contacto.' });
+    }
+
     const clean = (value, max = 800) => {
       if (
         value === null ||
