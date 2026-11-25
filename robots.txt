@@ -8,10 +8,18 @@ User-agent: *
 Allow: /
 Disallow: /netlify/functions/
 Disallow: /.netlify/
+Disallow: /.netlify/functions/
 
 # ============================================
 # BOTS DE IA - PERMITIR EXPLÍCITAMENTE
 # ============================================
+
+# OpenAI (búsqueda y acceso solicitado por usuarios)
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /netlify/functions/
+Disallow: /.netlify/
+Disallow: /.netlify/functions/
 
 # OpenAI (ChatGPT)
 User-agent: GPTBot
