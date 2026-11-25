@@ -153,11 +153,11 @@ exports.handler = async (event) => {
   };
 
   const calculateState = (prospect, score) => {
-    if (!prospect.realBusinessConfirmed) return 'Explorando';
+    if (!prospect.realBusinessConfirmed && !['Persona','Profesional'].includes(prospect.clientType)) return 'Explorando';
 
     if (
       prospect.whatsapp &&
-      prospect.businessType &&
+      (prospect.businessType || ['Persona','Profesional'].includes(prospect.clientType)) &&
       prospect.need &&
       (prospect.implementationIntent || prospect.wantsGuido)
     ) {
@@ -180,9 +180,9 @@ exports.handler = async (event) => {
   };
 
   const getNextMissingField = (prospect) => {
-    if (!prospect.realBusinessConfirmed ||
+    if (!(prospect.realBusinessConfirmed || ['Persona','Profesional'].includes(prospect.clientType)) ||
         !(prospect.implementationIntent || prospect.wantsGuido)) return '';
-    if (!prospect.businessType) return 'tipo de negocio';
+    if (prospect.realBusinessConfirmed && !prospect.businessType) return 'tipo de negocio';
     if (!prospect.need) return 'necesidad principal';
 
     if (
@@ -191,7 +191,7 @@ exports.handler = async (event) => {
     ) {
       if (!prospect.name) return 'nombre';
       if (!prospect.whatsapp) return 'WhatsApp';
-      if (!prospect.urgency) return 'urgencia';
+      if (!prospect.city) return 'ciudad';
     }
 
     return '';
@@ -289,6 +289,7 @@ exports.handler = async (event) => {
         visitorProfile?.urgency,
         30
       ),
+      clientType: ['Persona','Profesional','Empresa'].includes(visitorProfile?.clientType) ? visitorProfile.clientType : '',
       realBusinessConfirmed: Boolean(visitorProfile?.realBusinessConfirmed),
       implementationIntent: Boolean(visitorProfile?.implementationIntent),
       wantsGuido: Boolean(visitorProfile?.wantsGuido)
@@ -381,6 +382,7 @@ exports.handler = async (event) => {
                   ]
                 },
 
+                clientType: { type: 'string', enum: ['', 'Persona', 'Profesional', 'Empresa'] },
                 realBusinessConfirmed: {
                   type: 'boolean'
                 },
@@ -402,6 +404,7 @@ exports.handler = async (event) => {
                 'niche',
                 'need',
                 'urgency',
+                'clientType',
                 'realBusinessConfirmed',
                 'implementationIntent',
                 'wantsGuido'
@@ -522,6 +525,7 @@ exports.handler = async (event) => {
     // ==========================================
 
     const prospect = {
+      clientType: ['Persona','Profesional','Empresa'].includes(structured?.prospect?.clientType) ? structured.prospect.clientType : '',
       name: cleanString(
         structured?.prospect?.name,
         100
@@ -596,12 +600,12 @@ exports.handler = async (event) => {
     );
 
     const crmReady = Boolean(
-      prospect.realBusinessConfirmed &&
+      (prospect.realBusinessConfirmed || ['Persona','Profesional'].includes(prospect.clientType)) &&
       handoffSuggested &&
       prospect.name &&
       prospect.whatsapp &&
       prospect.city &&
-      prospect.businessType &&
+      (prospect.realBusinessConfirmed ? prospect.businessType : ['Persona','Profesional'].includes(prospect.clientType)) &&
       prospect.need
     );
 
@@ -645,7 +649,7 @@ exports.handler = async (event) => {
         nombre: prospect.name,
         whatsapp: prospect.whatsapp,
         ciudad: prospect.city,
-        tipoNegocio: prospect.businessType,
+        tipoNegocio: prospect.realBusinessConfirmed ? prospect.businessType : prospect.clientType,
         nicho: prospect.niche,
         necesidad: prospect.need,
         urgencia: prospect.urgency,
